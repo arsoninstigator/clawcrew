@@ -11,7 +11,7 @@ import httpx
 
 from base import AppCase
 
-from clawcrew.connectors import build_adapter
+from clawcrew.manage.knowledge.service import build_adapter
 from clawcrew.errors import NotAllowed, ProviderNotConfigured, ValidationError
 
 

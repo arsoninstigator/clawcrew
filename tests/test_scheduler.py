@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from base import AppCase
 
 from clawcrew.errors import ValidationError
-from clawcrew.scheduler import CronExpression, InProcBroker
+from clawcrew.work.schedule.service import CronExpression, InProcBroker
 
 
 class CronTests(unittest.TestCase):

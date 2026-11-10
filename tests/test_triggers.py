@@ -14,7 +14,7 @@ import base  # noqa: F401
 from base import AppCase
 
 from clawcrew.errors import ValidationError
-from clawcrew.triggers import TriggerService, lookup
+from clawcrew.work.triggers.service import TriggerService, lookup
 
 
 class TriggerRuleTests(AppCase):
@@ -151,10 +151,10 @@ class CeleryConfigTests(unittest.TestCase):
         schedule = jobs.celery.conf.beat_schedule
         self.assertIn("clawcrew-tick", schedule)
         self.assertIn("clawcrew-nightly", schedule)
-        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.jobs.tick")
-        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.jobs.nightly")
+        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.work.schedule.jobs.tick")
+        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.work.schedule.jobs.nightly")
         registered = set(jobs.celery.tasks)
-        for name in ("clawcrew.jobs.run_job", "clawcrew.jobs.tick", "clawcrew.jobs.fire_event"):
+        for name in ("clawcrew.work.schedule.jobs.run_job", "clawcrew.work.schedule.jobs.tick", "clawcrew.work.schedule.jobs.fire_event"):
             self.assertIn(name, registered)
 
 

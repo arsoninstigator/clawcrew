@@ -32,12 +32,12 @@ from typing import Any
 from fastapi import Body, FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import a2a_human
-from . import a2a_protocol as a2a_spec
-from .app import App, build_app
-from .errors import ClawCrewError, NotFound, ValidationError
-from .importers import SOURCES, import_workflow
-from .web import POV_PAGE, gate_page
+from clawcrew.comms.a2a import human as a2a_human
+from clawcrew.comms.a2a import protocol as a2a_spec
+from clawcrew.app import App, build_app
+from clawcrew.errors import ClawCrewError, NotFound, ValidationError
+from clawcrew.orgchart.authoring.importers import SOURCES, import_workflow
+from clawcrew.web import POV_PAGE, gate_page
 
 
 def create_api(app: App | None = None) -> FastAPI:

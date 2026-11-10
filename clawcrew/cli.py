@@ -15,16 +15,16 @@ import argparse
 import json
 import os
 
-from .app import build_app
-from .config import Settings
-from .errors import ClawCrewError
+from clawcrew.app import build_app
+from clawcrew.config import Settings
+from clawcrew.errors import ClawCrewError
 
 
 def _app(args: argparse.Namespace):
     settings = Settings.from_env()
     if getattr(args, "db", None):
         settings.database_path = args.db
-    from .runtime import DeterministicModel
+    from clawcrew.create.agents.runtime import DeterministicModel
 
     model = DeterministicModel() if getattr(args, "dry_run", False) else None
     return build_app(settings, model=model)

@@ -10,29 +10,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .a2a import A2AService
-from .asks import AskService
-from .audit import AuditService
-from .brief import BriefService
-from .connectors import ConnectorService
-from .channels import ChannelService
-from .config import Settings
-from .crews import CrewService
-from .departments import DepartmentService
-from .db import Store
-from .errors import ClawCrewError
-from .gates import GateService
-from .kanban import KanbanService
-from .orchestrator import CrewRunner
-from .pov import PovService
-from .profile import ProfileService
-from .runtime import AgentModel
-from .sandbox import ProviderRegistry, build_registry
-from .scheduler import Scheduler, Worker, make_broker
-from .services import ServiceRegistry
-from .shifts import ShiftService
-from .triggers import TriggerService
-from .workflows import WorkflowService
+from clawcrew.comms.a2a.service import A2AService
+from clawcrew.create.intake import AskService
+from clawcrew.manage.provenance.service import AuditService
+from clawcrew.work.overnight.service import BriefService
+from clawcrew.manage.knowledge.service import ConnectorService
+from clawcrew.comms.channels.service import ChannelService
+from clawcrew.config import Settings
+from clawcrew.create.crew.service import CrewService
+from clawcrew.orgchart.department.service import DepartmentService
+from clawcrew.db import Store
+from clawcrew.errors import ClawCrewError
+from clawcrew.manage.approvals.service import GateService
+from clawcrew.work.tasks.service import KanbanService
+from clawcrew.create.agents.orchestrator import CrewRunner
+from clawcrew.manage.pov.service import PovService
+from clawcrew.manage.agent_profiles.service import ProfileService
+from clawcrew.create.agents.runtime import AgentModel
+from clawcrew.create.sandbox import ProviderRegistry, build_registry
+from clawcrew.work.schedule.service import Scheduler, Worker, make_broker
+from clawcrew.create.workflow.services import ServiceRegistry
+from clawcrew.work.shifts.service import ShiftService
+from clawcrew.work.triggers.service import TriggerService
+from clawcrew.create.workflow.service import WorkflowService
 
 
 @dataclass

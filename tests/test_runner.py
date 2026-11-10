@@ -7,7 +7,7 @@ import unittest
 from base import AppCase
 
 from clawcrew.errors import NotFound, ValidationError
-from clawcrew.runtime import DeterministicModel, parse_action
+from clawcrew.create.agents.runtime import DeterministicModel, parse_action
 
 
 class SelectionTests(AppCase):

@@ -9,8 +9,8 @@ from base import AppCase
 
 from clawcrew.config import Settings
 from clawcrew.errors import NotAllowed, ProviderNotConfigured
-from clawcrew.sandbox import Handle, ProviderRegistry
-from clawcrew.sandbox.local import LocalProvider
+from clawcrew.create.sandbox import Handle, ProviderRegistry
+from clawcrew.create.sandbox.local import LocalProvider
 
 
 class LocalProviderTests(AppCase):
