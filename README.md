@@ -125,7 +125,7 @@ workers never take the same job.
 | `POST /crews/{id}/agents` `GET .../agents` `PATCH /agents/{id}` | agents |
 | `POST /agents/{id}/computer` `GET /agents/{id}/computer` | persistent computer |
 | `GET/PUT /crews/{id}/context` | shared memory |
-| `POST /crews/{id}/tasks` `GET .../board` `PATCH /tasks/{id}/move` | kanban |
+| `POST /crews/{id}/tasks` `GET .../board` `POST /tasks/{id}/move` | kanban |
 | `POST /tasks/{id}/dispatch` `POST /crews/{id}/dispatch` | run work |
 | `GET /runs/{id}` `GET /tasks/{id}/runs` `GET /tasks/{id}/events` | inspection |
 | `POST /a2a` `GET /crews/{id}/a2a/review-queue` `POST /a2a/{id}/review` | a2a gate |
