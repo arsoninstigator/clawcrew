@@ -487,6 +487,12 @@ def create_api(app: App | None = None) -> FastAPI:
         return POV_PAGE
 
     # ---- per-agent profile: nine namespaces, no shared bucket ----------
+    @api.get("/agents/{agent_id}")
+    def get_agent(agent_id: str) -> dict:
+        agent = app.crews.get_agent(agent_id)
+        agent["profile"] = app.profile.profile(agent_id)
+        return agent
+
     @api.get("/agents/{agent_id}/profile")
     def agent_profile(agent_id: str) -> dict:
         return app.profile.profile(agent_id)
