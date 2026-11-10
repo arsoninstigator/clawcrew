@@ -12,6 +12,7 @@ from typing import Any
 
 from clawcrew.comms.a2a.service import A2AService
 from clawcrew.create.intake import AskService
+from clawcrew.create.coordination import SqliteCoordination
 from clawcrew.manage.provenance.service import AuditService
 from clawcrew.work.overnight.service import BriefService
 from clawcrew.manage.knowledge.service import ConnectorService
@@ -57,6 +58,7 @@ class App:
     brief: BriefService
     connectors: ConnectorService
     asks: AskService
+    coordination: SqliteCoordination
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
@@ -207,4 +209,5 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         brief=brief,
         connectors=connectors,
         asks=asks,
+        coordination=SqliteCoordination(store),
     )

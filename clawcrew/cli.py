@@ -7,6 +7,9 @@
     clawcrew work [--limit]  drain the queue
     clawcrew serve [--port]  run the http api
     clawcrew demo            seed + dispatch + review, end to end, no network
+    clawcrew get persistent  plan (and with --apply, create) a computer that stays
+    clawcrew get disposable  plan (and with --apply, create) one that is thrown away
+    clawcrew connect <cloud> one step byoc: detect what this machine already has
 """
 
 from __future__ import annotations
@@ -145,6 +148,75 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _provisioner(args: argparse.Namespace):
+    from clawcrew.create.sandbox.provision import Provisioner
+
+    return Provisioner(_settings(args))
+
+
+def _settings(args: argparse.Namespace) -> Settings:
+    settings = Settings.from_env()
+    if getattr(args, "db", None):
+        settings.database_path = args.db
+    return settings
+
+
+def cmd_get(args: argparse.Namespace) -> int:
+    """plan by default. creating a machine, and spending money, needs --apply."""
+    provisioner = _provisioner(args)
+    spec = {"name": args.name, "region": args.region} if args.region else {"name": args.name}
+    if args.host:
+        spec["ssh_host"] = args.host
+    if args.image:
+        spec["image"] = args.image
+    plan = provisioner.plan(args.kind, args.target, spec)
+    outcome = provisioner.apply(plan, dry_run=not args.apply)
+    print(json.dumps(outcome, indent=2))
+    if not args.apply:
+        print(f"\nnothing was created. add --apply when the plan looks right "
+              f"({len(plan.steps)} step(s)).", file=os.sys.stderr)
+    return 0 if outcome.get("ok", True) else 1
+
+
+def cmd_destroy(args: argparse.Namespace) -> int:
+    outcome = _provisioner(args).destroy(args.kind, args.name, args.target)
+    print(json.dumps(outcome, indent=2))
+    return 0 if outcome["destroyed"] else 1
+
+
+def cmd_connect(args: argparse.Namespace) -> int:
+    outcome = _provisioner(args).connect(args.provider)
+    print(json.dumps(outcome, indent=2))
+    return 0 if outcome["ready"] else 1
+
+
+def cmd_targets(args: argparse.Namespace) -> int:
+    print(json.dumps({"targets": _provisioner(args).targets()}, indent=2))
+    return 0
+
+
+def cmd_coordinator(args: argparse.Namespace) -> int:
+    """durable coordination, self hosted. prints the helm plan unless --apply."""
+    from clawcrew.create.coordination.durable_actors import plan_runtime
+    from clawcrew.create.plans import run_plan
+    from clawcrew.create.sandbox.provision import Provisioner
+
+    provisioner = Provisioner(_settings(args))
+    try:
+        plan = plan_runtime(
+            _settings(args), args.public_url, args.bucket, args.gsa, args.zone,
+            namespace=args.namespace, version=args.version, ingress=not args.no_ingress)
+    except ClawCrewError as exc:
+        print(json.dumps(exc.to_dict(), indent=2))
+        return 1
+    outcome = run_plan(plan, provisioner._runner, dry_run=not args.apply)
+    outcome["contract"] = __import__(
+        "clawcrew.create.coordination.durable_actors", fromlist=["actor_contract"]
+    ).actor_contract()
+    print(json.dumps(outcome, indent=2))
+    return 0 if outcome.get("ok", True) else 1
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -175,6 +247,38 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--reload", action="store_true")
     serve.set_defaults(func=cmd_serve)
+
+    get = sub.add_parser("get", help="plan a persistent or disposable computer")
+    get.add_argument("kind", choices=["persistent", "disposable"])
+    get.add_argument("--target", default="",
+                     help="local | celesto | e2b | docker | ssh | k8s | aws | gcp | azure | oracle")
+    get.add_argument("--name", default="clawcrew-1")
+    get.add_argument("--host", default="", help="user@host, for the ssh target")
+    get.add_argument("--region", default="")
+    get.add_argument("--image", default="")
+    get.add_argument("--apply", action="store_true",
+                     help="actually create it; without this only the plan is printed")
+    get.set_defaults(func=cmd_get)
+    kill = sub.add_parser("destroy", help="remove a computer by name")
+    kill.add_argument("kind", choices=["persistent", "disposable"])
+    kill.add_argument("name")
+    kill.add_argument("--target", default="")
+    kill.set_defaults(func=cmd_destroy)
+    connect = sub.add_parser("connect", help="detect credentials for a byoc target")
+    connect.add_argument("provider")
+    connect.set_defaults(func=cmd_connect)
+    sub.add_parser("targets", help="what this machine can provision").set_defaults(func=cmd_targets)
+    coordinator = sub.add_parser(
+        "coordinator", help="plan a self hosted durable actor runtime for leases and streams")
+    coordinator.add_argument("--public-url", default="")
+    coordinator.add_argument("--bucket", default="")
+    coordinator.add_argument("--gsa", default="")
+    coordinator.add_argument("--zone", default="")
+    coordinator.add_argument("--namespace", default="actors")
+    coordinator.add_argument("--version", default="")
+    coordinator.add_argument("--no-ingress", action="store_true")
+    coordinator.add_argument("--apply", action="store_true")
+    coordinator.set_defaults(func=cmd_coordinator)
 
     args = parser.parse_args(argv)
     try:

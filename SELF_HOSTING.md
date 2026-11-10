@@ -16,7 +16,7 @@ celesto doctor --strict # refuses to pretend if virtualization is not usable
 ```
 
 clawcrew then drives it through the documented CLI with `--json`
-(`clawcrew/sandbox/celesto_local.py`): `computer create --name`, `exec --start`,
+(`clawcrew/create/sandbox/celesto_local.py`): `computer create --name`, `exec --start`,
 `start`/`stop`/`pause`/`resume`/`delete`/`info`/`list`. an agent's computer is a
 named microVM that survives between tasks.
 

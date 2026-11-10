@@ -44,6 +44,11 @@ class Settings:
     celesto_default_image: str = "clawcrew/persistent:latest"
 
     # ephemeral sandboxes
+    # superserve is opt in: their runtime is their cloud, their sdk is the contract
+    superserve_api_key: str = ""
+    superserve_base_url: str = "https://api.superserve.ai"
+    superserve_template: str = ""
+
     e2b_api_key: str = ""
     e2b_base_url: str = "https://api.e2b.dev"
     e2b_default_template: str = "base"
@@ -94,6 +99,9 @@ class Settings:
             celesto_api_key=_env(env, "CELESTO_API_KEY"),
             celesto_base_url=_env(env, "CELESTO_BASE_URL", "https://api.celesto.ai/v1"),
             celesto_default_image=_env(env, "CELESTO_IMAGE", "clawcrew/persistent:latest"),
+            superserve_api_key=_env(env, "SUPERSERVE_API_KEY"),
+            superserve_base_url=_env(env, "SUPERSERVE_BASE_URL", "https://api.superserve.ai"),
+            superserve_template=_env(env, "SUPERSERVE_TEMPLATE"),
             e2b_api_key=_env(env, "E2B_API_KEY"),
             e2b_base_url=_env(env, "E2B_BASE_URL", "https://api.e2b.dev"),
             e2b_default_template=_env(env, "E2B_TEMPLATE", "base"),

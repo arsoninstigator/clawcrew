@@ -14,7 +14,7 @@ from typing import Callable
 from clawcrew.config import Settings
 from clawcrew.errors import ProviderNotConfigured
 from .base import BaseProvider, ExecResult, Handle, SandboxProvider, validate_spec  # noqa: F401
-from clawcrew.create.sandbox import celesto, celesto_local, e2b, local
+from clawcrew.create.sandbox import celesto, celesto_local, e2b, local, superserve
 
 __all__ = [
     "ExecResult",
@@ -38,6 +38,9 @@ class ProviderRegistry:
             settings.celesto_api_key, settings.celesto_base_url, settings.celesto_default_image
         )
         self._e2b = e2b.make(settings.e2b_api_key, settings.e2b_base_url, settings.e2b_default_template)
+        self._superserve = superserve.make(
+            settings.superserve_api_key, settings.superserve_base_url, settings.superserve_template
+        )
 
     def get(self, kind: str) -> SandboxProvider:
         """kind: 'persistent' | 'ephemeral' | provider name."""
@@ -53,6 +56,10 @@ class ProviderRegistry:
             if self._e2b.configured():
                 return self._e2b
             return self._fallback("e2b")
+        if kind == "superserve":
+            if self._superserve.configured():
+                return self._superserve
+            return self._fallback("superserve")
         if kind in {"local", "both"}:
             return self._local
         raise ProviderNotConfigured(f"unknown sandbox provider '{kind}'", provider=kind)

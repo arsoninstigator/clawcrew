@@ -40,7 +40,7 @@ behavior is not shipped. that is what section 5 fixes.
 
 baked, as engine, gates and bindings:
 
-- `clawcrew/workflows.py` stores a json dag and runs it. seven node types:
+- `clawcrew/create/workflow/service.py` stores a json dag and runs it. seven node types:
   `agent_task`, `shell`, `set_context`, `human_gate`, `branch`, `n8n`, `dify`.
 - validation is strict at save time: unknown type, missing node spec, dangling
   dependency, cycle, or an `n8n` node without a webhook path are all 422s at save,
