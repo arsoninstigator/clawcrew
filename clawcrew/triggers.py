@@ -37,7 +37,7 @@ EVENTS = (
 )
 
 # job kinds the worker knows how to run, plus the ones a trigger can ask for
-ACTIONS = ("task", "dispatch", "workflow", "schedule")
+ACTIONS = ("task", "dispatch", "workflow", "schedule", "brief", "card", "shift_roll")
 
 
 class TriggerService:
@@ -144,6 +144,12 @@ class TriggerService:
                     "update triggers set fired_count = fired_count + 1, last_fired_at = ? where id = ?",
                     (now(), trigger["id"]),
                 )
+                c.execute(
+                    """insert into trigger_log (id, team_id, trigger_id, event, action, job_id, created_date)
+                       values (?,?,?,?,?,?,?)""",
+                    (new_id("tgl"), trigger["team_id"], trigger["id"], event,
+                     trigger["action"], job_id or "", now()),
+                )
             fired.append(
                 {"trigger": trigger["id"], "event": event, "action": trigger["action"],
                  "job": job_id, "payload": payload}
@@ -191,6 +197,81 @@ class TriggerService:
         if isinstance(template, list):
             return [self._render(v, context) for v in template]
         return template
+
+
+
+    # ---- packs ---------------------------------------------------------
+    def log(self, team_id: str, since: float, until: float | None = None) -> list[dict]:
+        """what actually fired in a window. `fired_count` is a total; this is the
+        answer to "what ran last night"."""
+        rows = self.store.query(
+            "select * from trigger_log where team_id = ? and created_date >= ? and created_date <= ? "
+            "order by created_date desc",
+            (team_id, since, until if until is not None else now()),
+        )
+        return [
+            {"id": r["id"], "trigger": r["trigger_id"], "event": r["event"],
+             "action": r["action"], "job": r["job_id"], "at": r["created_date"]}
+            for r in rows
+        ]
+
+    def install_pack(self, team_id: str, pack: str = "overnight",
+                     dry_run: bool = False) -> dict:
+        """adopt a reviewed set of rules in one call.
+
+        the night is a capability until something listens to it. this is that
+        something: the rules an operator would have written themselves, written
+        once, idempotent by name, and visible afterwards like any other rule.
+        """
+        if pack not in PACKS:
+            raise ValidationError(f"unknown pack '{pack}'", allowed=sorted(PACKS))
+        if not self.store.one("select id from teams where id = ?", (team_id,)):
+            raise NotFound(f"crew {team_id} not found")
+        existing = {r["name"] for r in self.store.query(
+            "select name from triggers where team_id = ?", (team_id,))}
+        would: list[dict] = []
+        created: list[dict] = []
+        for rule in PACKS[pack]:
+            spec = {
+                "name": rule["name"],
+                "event": rule["event"],
+                "action": rule["action"],
+                "payload": {**rule.get("payload", {}), "team_id": "${team_id}"},
+                "condition": rule.get("condition", ""),
+            }
+            would.append(spec)
+            if dry_run or spec["name"] in existing:
+                continue
+            created.append(self.create(
+                team_id=team_id,
+                name=spec["name"],
+                event=spec["event"],
+                action=spec["action"],
+                payload=spec["payload"],
+                condition=spec["condition"],
+            ))
+        return {"pack": pack, "dry_run": dry_run, "rules": would,
+                "created": [c["id"] for c in created],
+                "skipped": sorted(existing & {w["name"] for w in would})}
+
+
+# the overnight pack. two of these exist because a silent failure costs a whole
+# night; the rest exist so the morning has something to report.
+PACKS: dict[str, list[dict]] = {
+    "overnight": [
+        {"name": "overnight: brief", "event": "schedule.nightly", "action": "brief",
+         "payload": {"team_id": "${team_id}"}},
+        {"name": "overnight: roll shifts", "event": "schedule.nightly",
+         "action": "shift_roll", "payload": {"team_id": "${team_id}"}},
+        {"name": "overnight: fail loudly", "event": "run.failed", "action": "card",
+         "payload": {"team_id": "${team_id}", "title": "a run failed: ${error}",
+                     "description": "task ${task_id}, run ${run_id}. "
+                                    "nobody was watching at the time.",
+                     "column": "review"}},
+        {"name": "overnight: a2a digest", "event": "schedule.nightly", "action": "brief",
+         "payload": {"team_id": "${team_id}", "include_a2a": True}},
+    ]
+}
 
 
 def lookup(context: Any, path: str) -> Any:

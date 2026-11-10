@@ -19,6 +19,10 @@ groups:
   /ui/pov       the served point-of-view switcher
   /profile      per-agent skills, scope, memory, perms, tools, vertical, spawn policy
   /ops          health, providers, queue tick, worker drain, counts
+  /ask          maestro: an outcome in, a reviewed plan out
+  /brief        the night, as numbers
+  /gates, /g    approvals that need a link, not a login
+  /connectors   workspace knowledge, and which agent may read it
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from . import a2a_protocol as a2a_spec
 from .app import App, build_app
 from .errors import ClawCrewError, NotFound, ValidationError
 from .importers import SOURCES, import_workflow
-from .web import POV_PAGE
+from .web import POV_PAGE, gate_page
 
 
 def create_api(app: App | None = None) -> FastAPI:
@@ -49,7 +53,8 @@ def create_api(app: App | None = None) -> FastAPI:
         """single shared token. the backend is meant to sit behind your own auth
         proxy; this is the floor, not a user model."""
         token = app.settings.api_token
-        if not token or request.url.path == "/health" or request.method == "OPTIONS":
+        public = request.url.path == "/health" or request.url.path.startswith("/g/")
+        if not token or public or request.method == "OPTIONS":
             return await call_next(request)
         supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
         supplied = supplied or request.headers.get("x-clawcrew-token", "")
@@ -846,4 +851,214 @@ def create_api(app: App | None = None) -> FastAPI:
         enabled = bool((payload or {}).get("enabled", True))
         return app.scheduler.set_enabled(schedule_id, enabled)
 
+    # ---- maestro: an outcome in, a plan out ---------------------------
+    @api.post("/crews/{team_id}/ask")
+    def ask_crew(team_id: str, payload: dict = Body(...),
+                 idempotency_key: str = Query(default="", alias="idempotency_key")) -> dict:
+        data = body(payload)
+        return app.asks.ask(
+            team_id,
+            text=data.get("text", ""),
+            mode=data.get("mode", "plan"),
+            channel_id=data.get("channel_id"),
+            due=data.get("due", ""),
+            constraints=data.get("constraints") or {},
+            actor=data.get("actor", "owner"),
+            idempotency_key=idempotency_key or data.get("idempotency_key", ""),
+        )
+
+    @api.get("/crews/{team_id}/asks")
+    def list_asks(team_id: str, limit: int = Query(default=20)) -> dict:
+        return {"asks": app.asks.list(team_id, limit=limit)}
+
+    @api.get("/asks/{ask_id}")
+    def get_ask(ask_id: str) -> dict:
+        return app.asks.get(ask_id)
+
+    @api.post("/asks/{ask_id}/approve")
+    def approve_ask(ask_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload) if payload else {}
+        return app.asks.approve(ask_id, actor=data.get("actor", "owner"),
+                                dispatch=bool(data.get("dispatch", True)))
+
+    @api.post("/asks/{ask_id}/dispatch")
+    def dispatch_ask(ask_id: str) -> dict:
+        return app.asks.dispatch(ask_id)
+
+    # ---- the morning brief -------------------------------------------
+    @api.post("/crews/{team_id}/brief")
+    def build_brief(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload) if payload else {}
+        return app.brief.build(team_id, date=data.get("date"),
+                               include_a2a=bool(data.get("include_a2a")),
+                               store=bool(data.get("store", True)))
+
+    @api.get("/crews/{team_id}/brief")
+    def get_brief(team_id: str, date: str = Query(default="")) -> dict:
+        if date:
+            return app.brief.get(team_id, date)
+        return app.brief.build(team_id, store=False)
+
+    @api.get("/crews/{team_id}/briefs")
+    def list_briefs(team_id: str, limit: int = Query(default=14)) -> dict:
+        return {"briefs": app.brief.list(team_id, limit=limit)}
+
+    @api.get("/agents/{agent_id}/brief")
+    def agent_brief(agent_id: str, date: str = Query(default="")) -> dict:
+        agent = app.crews.get_agent(agent_id)
+        return app.brief.build(agent["team_id"], date=date or None, agent_id=agent_id,
+                               store=False)
+
+    # ---- approvals without a login -----------------------------------
+    @api.get("/g/{token}", response_class=HTMLResponse)
+    def gate_public(token: str) -> str:
+        try:
+            preview = app.gates.preview(token)
+        except ClawCrewError as exc:
+            return gate_page("this approval link does not work",
+                             f"<p>{exc.message}</p><p class='note'>ask whoever sent it "
+                             "for a fresh link; nothing was changed.</p>")
+        gate = preview["gate"]
+        if preview["already"]:
+            decided = gate["decided"] or "closed"
+            return gate_page(
+                gate["title"],
+                f"<p class='done'>already {decided}. nothing else to do.</p>",
+                decision=decided,
+                kicker="already answered",
+            )
+        if not preview["usable"]:
+            return gate_page(gate["title"],
+                             "<p>this link has expired. the run is still parked and the "
+                             "card is still in review.</p>", kicker="expired")
+        decision = preview["decision"]
+        verb = "approved" if decision == "approved" else (
+            "rejected" if decision == "rejected" else decision)
+        prompt = f"<p>{gate['prompt']}</p>" if gate.get("prompt") else ""
+        return gate_page(
+            gate["title"],
+            f"{prompt}<form method='post' action='/g/{token}'>"
+            f"<button type='submit'>{verb}</button></form>"
+            "<p class='note'>one tap. no account, no login, and the link stops working "
+            "after this.</p>",
+            decision=decision,
+            kicker=f"needs {verb}",
+        )
+
+    @api.post("/g/{token}", response_class=HTMLResponse)
+    def gate_public_decide(token: str) -> str:
+        try:
+            outcome = app.gates.decide(token, actor="owner")
+        except ClawCrewError as exc:
+            return gate_page("that did not go through", f"<p>{exc.message}</p>")
+        gate = outcome["gate"]
+        decided = outcome["decision"]
+        extra = ""
+        if outcome.get("already"):
+            extra = "<p class='note'>it was already answered earlier.</p>"
+        if outcome.get("run"):
+            extra += f"<p class='note'>run is now <code>{outcome['run'].get('status')}</code>.</p>"
+        return gate_page(gate["title"],
+                         f"<p class='done'>{decided}. recorded, and the record says who and "
+                         f"when.</p>{extra}", decision=decided, kicker="done")
+
+    @api.get("/gates")
+    def list_gates(team_id: str = Query(...), status: str = Query(default="")) -> dict:
+        return {"gates": app.gates.list(team_id, status=status or None)}
+
+    @api.get("/gates/{gate_id}")
+    def get_gate(gate_id: str) -> dict:
+        return app.gates.get(gate_id)
+
+    @api.post("/gates/{gate_id}/decide")
+    def decide_gate(gate_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.gates.decide(gate_id, decision=data.get("decision", ""),
+                                actor=data.get("actor", "owner"),
+                                note=data.get("note", ""))
+
+    # ---- workspace connectors and per-agent access -------------------
+    @api.post("/crews/{team_id}/connectors")
+    def connect_workspace(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.connectors.connect(
+            team_id,
+            kind=data.get("kind", ""),
+            name=data.get("name", ""),
+            config=data.get("config") or {},
+            secret_env=data.get("secret_env", ""),
+            actor=data.get("actor", "owner"),
+        )
+
+    @api.get("/crews/{team_id}/connectors")
+    def list_connectors(team_id: str) -> dict:
+        return {"connectors": app.connectors.list(team_id),
+                "kinds": sorted(ADAPTERS)}
+
+    @api.delete("/connectors/{connector_id}")
+    def disconnect(connector_id: str) -> dict:
+        return app.connectors.disconnect(connector_id)
+
+    @api.get("/connectors/{connector_id}/probe")
+    def probe_connector(connector_id: str) -> dict:
+        return app.connectors.probe(connector_id)
+
+    @api.post("/connectors/{connector_id}/sync")
+    def sync_connector(connector_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload) if payload else {}
+        return app.connectors.sync(connector_id, limit=int(data.get("limit", 50)))
+
+    @api.get("/connectors/{connector_id}/docs")
+    def connector_docs(connector_id: str, limit: int = Query(default=50)) -> dict:
+        return {"docs": app.connectors.docs(connector_id, limit=limit)}
+
+    @api.post("/agents/{agent_id}/access")
+    def grant_access(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.connectors.grant(
+            agent_id,
+            data.get("connector_id", ""),
+            supervisor_id=data.get("supervisor_id", ""),
+            expires_hours=float(data.get("expires_hours", 24)),
+            scopes=data.get("scopes"),
+            actor=data.get("actor", "owner"),
+        )
+
+    @api.delete("/agents/{agent_id}/access/{connector_id}")
+    def revoke_access(agent_id: str, connector_id: str,
+                      supervisor_id: str = Query(default=""),
+                      reason: str = Query(default="")) -> dict:
+        return app.connectors.revoke(agent_id, connector_id, supervisor_id=supervisor_id,
+                                     reason=reason)
+
+    @api.get("/agents/{agent_id}/access")
+    def agent_access(agent_id: str) -> dict:
+        agent = app.crews.get_agent(agent_id)
+        return {"agent_id": agent_id,
+                "grants": [g for g in app.profile.grants(agent_id)
+                           if g.get("kind") == "connectors"],
+                "connectors": app.connectors.list(agent["team_id"])}
+
+    @api.get("/agents/{agent_id}/supervised-access")
+    def supervised_access(agent_id: str) -> dict:
+        return app.connectors.access(supervisor_id=agent_id)
+
+    @api.get("/agents/{agent_id}/knowledge")
+    def agent_knowledge(agent_id: str, q: str = Query(default=""),
+                        limit: int = Query(default=10),
+                        connector_id: str = Query(default="")) -> dict:
+        return app.connectors.search(agent_id, q, limit=limit,
+                                     connector_id=connector_id or None)
+
+    # ---- packs: reviewed rules a crew can adopt in one call -----------
+    @api.post("/crews/{team_id}/triggers/pack")
+    def install_pack(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload) if payload else {}
+        return app.triggers.install_pack(
+            team_id,
+            pack=data.get("pack", "overnight"),
+            dry_run=bool(data.get("dry_run", True)),
+        )
+
     return api
+

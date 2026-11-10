@@ -301,7 +301,9 @@ def make_broker(store: Store, settings: Settings) -> Broker:
 class Worker:
     """executes queued jobs. one call processes up to `limit` jobs."""
 
-    def __init__(self, store: Store, runner, workflows, broker: Broker | None = None, scheduler: Scheduler | None = None):
+    def __init__(self, store: Store, runner, workflows, broker: Broker | None = None,
+                 scheduler: Scheduler | None = None, brief=None, shifts=None,
+                 gates=None, channels=None):
         self.store = store
         self.runner = runner
         self.workflows = workflows
@@ -309,6 +311,10 @@ class Worker:
         self.kanban = runner.kanban
         self.crews = runner.crews
         self.scheduler = scheduler
+        self.brief = brief
+        self.shifts = shifts
+        self.gates = gates
+        self.channels = channels
 
     def process(self, limit: int = 5) -> list[dict]:
         results = []
@@ -363,4 +369,65 @@ class Worker:
         if job.kind == "workflow":
             run = self.workflows.run(payload["workflow_id"], payload.get("trigger") or {})
             return {"workflow_run": run["id"]}
+        if job.kind == "brief":
+            return self._brief(payload)
+        if job.kind == "card":
+            return self._card(payload)
+        if job.kind == "shift_roll":
+            return self._roll(payload)
         raise ValidationError(f"unknown job kind '{job.kind}'")
+
+    # ---- the overnight pack's three job kinds --------------------------
+    def _brief(self, payload: dict) -> dict:
+        """compute the night, store it, and put it where the owner already is."""
+        if self.brief is None:
+            raise ProviderNotConfigured("no brief service wired")
+        team_id = payload.get("team_id")
+        if not team_id:
+            raise ValidationError("brief job needs team_id")
+        brief = self.brief.build(
+            team_id,
+            date=payload.get("date"),
+            include_a2a=bool(payload.get("include_a2a")),
+        )
+        crew = self.crews.get_team(team_id)
+        text = self.brief.digest(brief, crew_name=crew["name"])
+        delivered = ""
+        if self.channels is not None and not payload.get("dry_run"):
+            for channel in self.channels.list(team_id)[:1]:
+                self.channels.post(channel["id"], text, author_kind="system")
+                delivered = channel["id"]
+        return {"brief": brief["id"], "date": brief["date"], "delivered_to": delivered,
+                "text": text}
+
+    def _card(self, payload: dict) -> dict:
+        """a card without a dispatch: this is how a failure gets a human's eyes
+        without starting an agent on top of the failure."""
+        team_id = payload.get("team_id")
+        if not team_id:
+            raise ValidationError("card job needs team_id")
+        columns = self.kanban.columns(team_id)
+        column = payload.get("column") or "review"
+        if column not in columns:
+            column = "review" if "review" in columns else columns[0]
+        task = self.kanban.create_task(
+            team_id=team_id,
+            title=str(payload.get("title") or "card")[:160],
+            description=str(payload.get("description") or ""),
+            column=column,
+            priority=int(payload.get("priority", 0)),
+            required_skills=list(payload.get("required_skills") or []),
+            payload={"from_job": True, "source": payload.get("source", "trigger")},
+        )
+        return {"task_id": task["id"], "column": task["column"]}
+
+    def _roll(self, payload: dict) -> dict:
+        """advance any shift plan whose slot boundary has passed."""
+        if self.shifts is None:
+            raise ProviderNotConfigured("no shift service wired")
+        team_id = payload.get("team_id") or ""
+        plans = self.shifts.list_plans(team_id) if team_id else []
+        rolled = []
+        for plan in plans:
+            rolled.append(self.shifts.roll(plan["id"]))
+        return {"rolled": len(rolled)}

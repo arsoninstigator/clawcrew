@@ -11,13 +11,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from .a2a import A2AService
+from .asks import AskService
 from .audit import AuditService
+from .brief import BriefService
+from .connectors import ConnectorService
 from .channels import ChannelService
 from .config import Settings
 from .crews import CrewService
 from .departments import DepartmentService
 from .db import Store
 from .errors import ClawCrewError
+from .gates import GateService
 from .kanban import KanbanService
 from .orchestrator import CrewRunner
 from .pov import PovService
@@ -49,13 +53,19 @@ class App:
     audit: AuditService
     shifts: ShiftService
     profile: ProfileService
+    gates: GateService
+    brief: BriefService
+    connectors: ConnectorService
+    asks: AskService
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
         whoever just came on shift. called by celery beat, by the cli, and by tests."""
         enqueued = self.scheduler.tick()
         handoffs = self.roll_shifts()
-        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs]}
+        expired = self.gates.expire()
+        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs],
+                "gates_expired": expired}
 
     def roll_shifts(self) -> list[dict]:
         rolled = []
@@ -92,6 +102,12 @@ class App:
             "audit_entries": n("agent_audit"),
             "profile_entries": n("agent_profile"),
             "spawns": n("agent_spawns"),
+            "asks": n("asks"),
+            "briefs": n("briefs"),
+            "gates": n("gates"),
+            "connectors": n("connectors"),
+            "knowledge_docs": n("knowledge_docs"),
+            "trigger_log": n("trigger_log"),
         }
 
 
@@ -125,6 +141,33 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     workflows.scheduler = scheduler
     workflows.audit = audit
 
+    # approval without a login: the link is the credential, the row is the record
+    gates = GateService(
+        store,
+        audit=audit,
+        secret=settings.gate_secret,
+        base_url=settings.public_base_url,
+        ttl_hours=settings.gate_ttl_hours,
+    )
+    gates.workflows = workflows
+    gates.channels = channels
+    workflows.gates = gates
+    workflows.channels = channels
+
+    brief = BriefService(store, crews, kanban=kanban, triggers=triggers, workflows=workflows,
+                         shifts=shifts, gates=gates, channels=channels,
+                         window_start_hour=settings.brief_window_start_hour,
+                         window_end_hour=settings.brief_window_end_hour)
+    connectors = ConnectorService(store, crews, profile, audit=audit)
+    connectors.departments = departments
+    asks = AskService(store, crews, kanban, runner, channels=channels,
+                      departments=departments, audit=audit)
+    worker.brief = brief
+    worker.shifts = shifts
+    worker.gates = gates
+    worker.channels = channels
+    runner.events_hook = lambda event, context: emit(event, context)
+
     def emit(event: str, context: dict | None = None):
         """one fan-out point: rules queue work, the audit chain records provenance."""
         fired = triggers.fire(event, context)
@@ -138,6 +181,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     workflows.events_hook = emit
     shifts.events_hook = emit
     profile.events_hook = emit
+    gates.events_hook = emit
+    connectors.events_hook = emit
+    asks.events_hook = emit
     return App(
         settings=settings,
         store=store,
@@ -157,4 +203,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit=audit,
         shifts=shifts,
         profile=profile,
+        gates=gates,
+        brief=brief,
+        connectors=connectors,
+        asks=asks,
     )
