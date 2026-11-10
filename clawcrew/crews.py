@@ -62,6 +62,9 @@ def new_agent_key(store: Store, attempts: int = 8) -> str:
 
 class CrewService:
     def __init__(self, store: Store, registry: ProviderRegistry | None = None):
+        # set by the composition root. when present, `scope` is read from the agent's
+        # profile rows instead of the legacy json column, so there is one source.
+        self.profile = None
         self.store = store
         self.registry = registry
 
@@ -183,6 +186,12 @@ class CrewService:
                 )
             except Exception as exc:
                 raise Conflict(f"agent '{name}' already exists in this crew") from exc
+        if self.profile is not None:
+            self.profile.ensure(agent_id, agent_scope, vertical_name=role or name)
+            for skill in skills or []:
+                self.profile.set(agent_id, "skills", str(skill), {"enabled": True})
+            for tool in tools or []:
+                self.profile.set(agent_id, "tools", str(tool), {"enabled": True})
         return self.get_agent(agent_id)
 
     def get_agent(self, agent_id: str) -> dict:
@@ -217,6 +226,16 @@ class CrewService:
             return self.get_agent(agent_id)
         if "status" in patch and patch["status"] not in AGENT_STATUS:
             raise ValidationError(f"status must be one of {sorted(AGENT_STATUS)}")
+        if "scope" in patch and self.profile is not None:
+            incoming = patch.pop("scope") or {}
+            for key, value in incoming.items():
+                if key == "permissions":
+                    current = self.profile.scope_dict(agent_id)["permissions"]
+                    self.profile.set(agent_id, "scope", "permissions", {**current, **value})
+                else:
+                    self.profile.set(agent_id, "scope", key, value)
+            if not patch:
+                return self.get_agent(agent_id)
         if "scope" in patch:
             agent = self.get_agent(agent_id)
             incoming = patch["scope"] or {}
@@ -254,7 +273,17 @@ class CrewService:
             "runtime": loads(row["runtime"], {}),
             "status": row["status"],
             "agent_key": row["agent_key"] if "agent_key" in row.keys() else "",
-            "scope": loads(row["scope"], {}) if "scope" in row.keys() else {},
+            "scope": (
+                self.profile.scope_dict(row["id"])
+                if self.profile is not None
+                else (loads(row["scope"], {}) if "scope" in row.keys() else {})
+            ),
+            "vertical": (
+                ((self.profile.profile(row["id"])["namespaces"].get("vertical") or {})
+                 .get("primary", "") or {}).get("name", "")
+                if self.profile is not None
+                else ""
+            ),
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

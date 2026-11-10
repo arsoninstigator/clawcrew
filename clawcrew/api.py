@@ -17,6 +17,7 @@ groups:
   /shift-plans  coverage rotations, and the handoffs between them
   /audit        the per-agent hash-chained provenance trail
   /ui/pov       the served point-of-view switcher
+  /profile      per-agent skills, scope, memory, perms, tools, vertical, spawn policy
   /ops          health, providers, queue tick, worker drain, counts
 """
 
@@ -484,6 +485,113 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/ui/pov", response_class=HTMLResponse)
     def pov_page() -> str:
         return POV_PAGE
+
+    # ---- per-agent profile: nine namespaces, no shared bucket ----------
+    @api.get("/agents/{agent_id}/profile")
+    def agent_profile(agent_id: str) -> dict:
+        return app.profile.profile(agent_id)
+
+    @api.put("/agents/{agent_id}/profile/{namespace}/{key}")
+    def set_profile_entry(agent_id: str, namespace: str, key: str,
+                          payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if "value" not in data:
+            raise ValidationError("body needs a 'value'")
+        return app.profile.set(
+            agent_id, namespace, key, data["value"], origin=data.get("origin", "agent")
+        )
+
+    @api.delete("/agents/{agent_id}/profile/{namespace}/{key}")
+    def delete_profile_entry(agent_id: str, namespace: str, key: str) -> dict:
+        return app.profile.delete(agent_id, namespace, key)
+
+    @api.get("/agents/{agent_id}/effective")
+    def agent_effective(agent_id: str) -> dict:
+        team = app.crews.get_agent(agent_id)["team_id"]
+        defaults = (app.crews.get_team(team)["orchestration"] or {}).get("agent_defaults") or {}
+        return app.profile.effective(agent_id, defaults=defaults)
+
+    @api.get("/agents/{agent_id}/consistency")
+    def agent_consistency(agent_id: str) -> dict:
+        return app.profile.consistent(agent_id)
+
+    @api.get("/agents/{agent_id}/memory")
+    def agent_memory(agent_id: str) -> dict:
+        return app.profile.memory(agent_id)
+
+    @api.post("/agents/{agent_id}/memory")
+    def remember(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if not data.get("key"):
+            raise ValidationError("key is required")
+        return app.profile.remember(
+            agent_id, data["key"], data.get("value"), kind=data.get("kind", "note")
+        )
+
+    @api.delete("/agents/{agent_id}/memory/{key}")
+    def forget(agent_id: str, key: str) -> dict:
+        return app.profile.forget(agent_id, key)
+
+    @api.get("/agents/{agent_id}/grants")
+    def agent_grants(agent_id: str, active_only: bool = True) -> dict:
+        return {"grants": app.profile.grants(agent_id, active_only=active_only)}
+
+    @api.post("/agents/{agent_id}/grants")
+    def add_grant(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.profile.grant(
+            agent_id,
+            kind=data.get("kind", ""),
+            resource=data.get("resource", ""),
+            scopes=data.get("scopes") or [],
+            expires_at=data.get("expires_at"),
+            granted_by=data.get("granted_by", "owner"),
+        )
+
+    @api.delete("/agents/{agent_id}/grants/{kind}/{resource}")
+    def revoke_grant(agent_id: str, kind: str, resource: str) -> dict:
+        return app.profile.revoke(agent_id, kind, resource)
+
+    @api.get("/agents/{agent_id}/spawn-policy")
+    def spawn_policy(agent_id: str) -> dict:
+        return app.profile.spawn_policy(agent_id)
+
+    @api.put("/agents/{agent_id}/spawn-policy")
+    def set_spawn_policy(agent_id: str, payload: dict = Body(...)) -> dict:
+        return app.profile.set_spawn_policy(agent_id, **body(payload))
+
+    @api.post("/agents/{agent_id}/spawn")
+    def spawn_subagent(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.profile.spawn(
+            agent_id,
+            name=data.get("name", ""),
+            role=data.get("role", ""),
+            mode=data.get("mode"),
+            task_id=data.get("task_id"),
+            vertical=data.get("vertical"),
+        )
+
+    @api.get("/agents/{agent_id}/children")
+    def agent_children(agent_id: str, include_retired: bool = False) -> dict:
+        return {"children": app.profile.children(agent_id, include_retired=include_retired)}
+
+    @api.get("/agents/{agent_id}/lineage")
+    def agent_lineage(agent_id: str) -> dict:
+        return {"lineage": app.profile.lineage(agent_id)}
+
+    @api.post("/agents/{agent_id}/children/{child_agent_id}/retire")
+    def retire_child(agent_id: str, child_agent_id: str,
+                     payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        child = app.crews.get_agent(child_agent_id)
+        if not any(c["child_agent_id"] == child["id"] for c in app.profile.children(agent_id, include_retired=True)):
+            raise ValidationError("that agent is not a subagent of this one")
+        return app.profile.retire(child_agent_id, reason=data.get("reason", ""))
+
+    @api.get("/crews/{team_id}/isolation")
+    def isolation_report(team_id: str) -> dict:
+        return app.profile.isolation_report(team_id)
 
     # ---- kanban -------------------------------------------------------
     @api.post("/crews/{team_id}/tasks")

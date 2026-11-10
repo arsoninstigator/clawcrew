@@ -108,6 +108,14 @@ is a projection, never a login, which is why it is cheap and honest.
 `action` + `payload` with `${path}` placeholders. card moves, room messages, finished
 workflows and the nightly beat all reach the same engine, and the queue is celery's.
 
+**profile** every agent carries its own nine namespaces: `skills`, `scope`, `memory`,
+`instructions`, `knowledge`, `perms`, `tools`, `vertical`, `spawn`. all of it is rows
+keyed by agent, so there is no crew-wide bucket an agent can write into and isolation
+is structural instead of a convention. writes replace, they never deep merge, and
+composition happens once, whole-value, with the losing default reported as `shadowed`.
+`GET /agents/{id}/profile` returns the config plus a fingerprint and the problems it can
+prove; `GET /crews/{id}/isolation` says whether two agents have become the same agent.
+
 **shift** coverage, the way a shop floor does it: a rotation, a slot length, and an
 arithmetic answer to "who is on the bar right now" (`slot_index = (now - anchor) //
 slot`, owner = `rotation[slot_index % len(rotation)]`). nothing about coverage is
@@ -168,6 +176,10 @@ workers never take the same job.
 | `GET /agents/{id}/provenance` `GET /agents/{id}/audit/verify` `GET /crews/{id}/audit` | the provenance chain |
 | `GET /crews/{id}/a2a/transcript` `GET /a2a/threads/{id}` | a2a as sentences, with envelopes |
 | `GET /ui/pov` | the served point-of-view switcher |
+| `GET /agents/{id}/profile` `PUT /agents/{id}/profile/{ns}/{key}` `GET /agents/{id}/effective` | per-agent config, and what it shadows |
+| `GET/POST /agents/{id}/memory` `GET/POST/DELETE /agents/{id}/grants` | memory and provider grants, per agent |
+| `PUT /agents/{id}/spawn-policy` `POST /agents/{id}/spawn` `GET /agents/{id}/lineage` | subagents, when allowed |
+| `GET /crews/{id}/isolation` | the anti-mush report |
 | `GET /health` `GET /providers` `GET /services` | ops, and which self-hosted tools are wired |
 
 `/docs` is the live openapi ui.
@@ -227,15 +239,15 @@ that vm had no nested virtualization, so celesto's microVMs cannot boot there. t
 persistent-computer path needs a host with `/dev/kvm`; the build check says so
 instead of pretending.
 
-292 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+309 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
 workflow validation and gates, the n8n and dify importers, the n8n and dify
 self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, channel
 boards, department routing and escalation, the pov projection, the trigger engine and
 the celery beat, shift rotation and handoffs, the hash-chained audit trail, the a2a
-human rendering, agent-authored workflows with their approval gate, and the http
-surface including auth.
+human rendering, agent-authored workflows with their approval gate, per-agent profile
+isolation and spawning, and the http surface including auth.
 
 ## honest limits
 

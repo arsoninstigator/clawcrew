@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 create table if not exists meta (
@@ -324,6 +324,37 @@ create table if not exists workflow_coauthors (
     created_date real not null,
     primary key (workflow_id, agent_id)
 );
+
+-- per-agent configuration, one row per (agent, namespace, key). there is no
+-- crew-wide bucket here on purpose: isolation is structural, not a convention.
+create table if not exists agent_profile (
+    id text primary key,
+    agent_id text not null references agents(id) on delete cascade,
+    namespace text not null,
+    key text not null,
+    value text not null default '{}',
+    version integer not null default 1,
+    origin text not null default 'agent',
+    created_date real not null,
+    updated_date real not null,
+    unique (agent_id, namespace, key)
+);
+create index if not exists agent_profile_ns on agent_profile (agent_id, namespace);
+
+-- who spawned whom. a child never inherits permissions, so this row is lineage and
+-- bookkeeping, not an access path.
+create table if not exists agent_spawns (
+    id text primary key,
+    team_id text not null,
+    parent_agent_id text not null references agents(id) on delete cascade,
+    child_agent_id text not null references agents(id) on delete cascade,
+    mode text not null default 'ephemeral',
+    task_id text,
+    status text not null default 'active',
+    created_date real not null,
+    retired_date real
+);
+create index if not exists agent_spawns_parent on agent_spawns (parent_agent_id, status);
 
 create table if not exists job_queue (
     id text primary key,

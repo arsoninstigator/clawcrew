@@ -21,6 +21,7 @@ from .errors import ClawCrewError
 from .kanban import KanbanService
 from .orchestrator import CrewRunner
 from .pov import PovService
+from .profile import ProfileService
 from .runtime import AgentModel
 from .sandbox import ProviderRegistry, build_registry
 from .scheduler import Scheduler, Worker, make_broker
@@ -47,6 +48,7 @@ class App:
     pov: PovService
     audit: AuditService
     shifts: ShiftService
+    profile: ProfileService
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
@@ -88,6 +90,8 @@ class App:
             "shift_plans": n("shift_plans"),
             "handoffs": n("handoffs"),
             "audit_entries": n("agent_audit"),
+            "profile_entries": n("agent_profile"),
+            "spawns": n("agent_spawns"),
         }
 
 
@@ -114,6 +118,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
                      scheduler=scheduler)
     audit = AuditService(store)
     shifts = ShiftService(store, crews, kanban, channels=channels, a2a=a2a, audit=audit)
+    profile = ProfileService(store, crews=crews, audit=audit)
+    crews.profile = profile
+    pov.profile = profile
+    profile.migrate()
     workflows.scheduler = scheduler
     workflows.audit = audit
 
@@ -129,6 +137,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     a2a.events_hook = emit
     workflows.events_hook = emit
     shifts.events_hook = emit
+    profile.events_hook = emit
     return App(
         settings=settings,
         store=store,
@@ -147,4 +156,5 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         pov=pov,
         audit=audit,
         shifts=shifts,
+        profile=profile,
     )

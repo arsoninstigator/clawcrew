@@ -50,13 +50,14 @@ def to_timestamp(value: Any) -> float | None:
 
 class PovService:
     def __init__(self, store: Store, kanban, crews, channels=None, departments=None,
-                 scheduler=None):
+                 scheduler=None, profile=None):
         self.store = store
         self.kanban = kanban
         self.crews = crews
         self.channels = channels
         self.departments = departments
         self.scheduler = scheduler
+        self.profile = profile
 
     # ---- the projection ------------------------------------------------
     def view(self, agent_id: str, days: int = 14) -> dict:
@@ -91,11 +92,33 @@ class PovService:
             "computer": self.crews.get_computer(agent_id),
             "context": self.crews.context(agent["team_id"]),
             "runs": self.recent_runs(agent_id),
+            "profile": self._profile_bits(agent_id),
             "attention": {
                 "needs_you": blocked,
                 "pending_reviews": inbox["pending"],
                 "due_soon": [entry for entry in calendar["entries"] if entry["kind"] == "task_due"],
             },
+        }
+
+    def _profile_bits(self, agent_id: str) -> dict:
+        if self.profile is None:
+            return {}
+        profile = self.profile.profile(agent_id)
+        return {
+            "fingerprint": profile["fingerprint"],
+            "revision": profile["revision"],
+            "consistent": profile["consistency"]["ok"],
+            "problems": profile["consistency"]["problems"],
+            "vertical": (profile["namespaces"].get("vertical") or {}).get("primary"),
+            "skills": sorted((profile["namespaces"].get("skills") or {}).keys()),
+            "tools": sorted((profile["namespaces"].get("tools") or {}).keys()),
+            "grants": [
+                {"key": grant["key"], "scopes": grant.get("scopes", [])}
+                for grant in self.profile.grants(agent_id)
+            ],
+            "spawn": self.profile.spawn_policy(agent_id),
+            "children": self.profile.children(agent_id),
+            "lineage": self.profile.lineage(agent_id),
         }
 
     # ---- pieces --------------------------------------------------------

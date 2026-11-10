@@ -46,6 +46,11 @@ ACTIONS = (
     "workflow.rejected",
     "workflow.finished",
     "run.failed",
+    "agent.spawned",
+    "agent.retired",
+    "grant.added",
+    "grant.revoked",
+    "profile.updated",
 )
 
 
