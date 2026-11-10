@@ -8,7 +8,7 @@ from base import AppCase
 
 from fastapi.testclient import TestClient
 
-from clawcrew.comms.a2a import protocol as spec
+from clawcrew import a2a_protocol as spec
 from clawcrew.api import create_api
 from clawcrew.errors import ValidationError
 

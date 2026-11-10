@@ -5,6 +5,9 @@ things that are hard to get right (sandbox lifecycle, the review gate, the
 transition table, cron math, queue claiming) are implemented, and the things that
 are vendor choices are behind one adapter interface.
 
+every section below credits prior art by its own name. clawcrew's vocabulary is
+its own: crews, channels (andos), shifts and handoffs, not another product's terms.
+
 ## symphony (by wix) → the crew model
 
 symphony sells a coordinated team of 5-ish agents for a small business, sharing

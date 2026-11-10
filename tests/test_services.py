@@ -18,10 +18,10 @@ import base  # noqa: F401
 
 from clawcrew.config import Settings
 from clawcrew.errors import ProviderFailure, ProviderNotConfigured, ValidationError
-from clawcrew.create.workflow.services import dify as dify_mod
-from clawcrew.create.workflow.services import n8n as n8n_mod
-from clawcrew.create.workflow.services import build_services
-from clawcrew.create.workflow.service import validate_definition
+from clawcrew.services import dify as dify_mod
+from clawcrew.services import n8n as n8n_mod
+from clawcrew.services import build_services
+from clawcrew.workflows import validate_definition
 
 
 class Recorder:

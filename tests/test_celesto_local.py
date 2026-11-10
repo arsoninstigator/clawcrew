@@ -15,8 +15,8 @@ import unittest
 import base  # noqa: F401
 
 from clawcrew.errors import ProviderFailure, ProviderNotConfigured
-from clawcrew.create.sandbox import celesto_local
-from clawcrew.create.sandbox.base import Handle
+from clawcrew.sandbox import celesto_local
+from clawcrew.sandbox.base import Handle
 
 
 def envelope(data=None, ok=True, exit_code=0, error=None) -> tuple[int, str, str]:

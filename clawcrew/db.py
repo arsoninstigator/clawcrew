@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 create table if not exists meta (
@@ -355,111 +355,6 @@ create table if not exists agent_spawns (
     retired_date real
 );
 create index if not exists agent_spawns_parent on agent_spawns (parent_agent_id, status);
-
--- maestro's front door: an outcome in, a plan out. the ask is a row, not a chat
--- transcript, so a plan can be reviewed after the fact.
-create table if not exists asks (
-    id text primary key,
-    team_id text not null references teams(id) on delete cascade,
-    text text not null,
-    mode text not null default 'plan',
-    interpretation text not null default '{}',
-    plan text not null default '[]',
-    status text not null default 'planned',
-    created_by text not null default 'owner',
-    idempotency_key text not null default '',
-    created_date real not null
-);
-create index if not exists asks_team on asks (team_id, created_date);
-create unique index if not exists asks_idempotent on asks (team_id, idempotency_key)
-    where idempotency_key <> '';
-
--- the morning brief stores the numbers it showed, so last week's claim is
--- checkable against what was actually displayed.
-create table if not exists briefs (
-    id text primary key,
-    team_id text not null references teams(id) on delete cascade,
-    date text not null,
-    window_from real not null,
-    window_to real not null,
-    numbers text not null default '{}',
-    prose text not null default '',
-    created_date real not null,
-    unique (team_id, date)
-);
-
--- a paused run waits for a decision, not a login. the gate is the row, the
--- signed link is the credential, and each decision has its own single-use nonce.
-create table if not exists gates (
-    id text primary key,
-    team_id text not null references teams(id) on delete cascade,
-    run_id text not null default '',
-    node_id text not null default '',
-    title text not null default '',
-    prompt text not null default '',
-    options text not null default '["approve","reject"]',
-    channel_id text,
-    status text not null default 'open',
-    decided text not null default '',
-    decided_by text not null default '',
-    decided_date real,
-    note text not null default '',
-    expires_at real not null,
-    created_date real not null
-);
-create index if not exists gates_open on gates (team_id, status, expires_at);
-
-create table if not exists gate_tokens (
-    nonce text primary key,
-    gate_id text not null references gates(id) on delete cascade,
-    decision text not null,
-    used_at real,
-    created_date real not null
-);
-
--- one row per workspace tool a crew can read from. the token is never stored:
--- `secret_env` names the environment variable that holds it.
-create table if not exists connectors (
-    id text primary key,
-    team_id text not null references teams(id) on delete cascade,
-    kind text not null,
-    name text not null,
-    config text not null default '{}',
-    secret_env text not null default '',
-    status text not null default 'connected',
-    last_sync real,
-    doc_count integer not null default 0,
-    created_date real not null,
-    unique (team_id, name)
-);
-
-create table if not exists knowledge_docs (
-    id text primary key,
-    team_id text not null references teams(id) on delete cascade,
-    connector_id text not null references connectors(id) on delete cascade,
-    external_id text not null,
-    title text not null default '',
-    url text not null default '',
-    text text not null default '',
-    checksum text not null default '',
-    updated_at real not null,
-    fetched_at real not null,
-    unique (connector_id, external_id)
-);
-create index if not exists knowledge_team on knowledge_docs (team_id, connector_id);
-
--- every rule that fires leaves a row. `fired_count` on the trigger is a total,
--- which is useless at 7am when the question is "what ran last night".
-create table if not exists trigger_log (
-    id text primary key,
-    team_id text not null,
-    trigger_id text not null,
-    event text not null,
-    action text not null,
-    job_id text not null default '',
-    created_date real not null
-);
-create index if not exists trigger_log_team on trigger_log (team_id, created_date);
 
 create table if not exists job_queue (
     id text primary key,

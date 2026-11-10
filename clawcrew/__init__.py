@@ -8,9 +8,9 @@ reviewable a2a channel, and visual workflows - self hosted.
     crew = app.crews.create_team("growth", mission="own the funnel")
 """
 
-from clawcrew.app import App, build_app
-from clawcrew.config import Settings
-from clawcrew.errors import (
+from .app import App, build_app
+from .config import Settings
+from .errors import (
     ClawCrewError,
     Conflict,
     NotAllowed,

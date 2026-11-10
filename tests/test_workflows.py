@@ -7,7 +7,7 @@ import unittest
 from base import AppCase
 
 from clawcrew.errors import NotFound, ValidationError
-from clawcrew.create.workflow.service import WorkflowService, validate_definition
+from clawcrew.workflows import WorkflowService, validate_definition
 
 
 def linear_dag() -> dict:

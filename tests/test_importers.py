@@ -14,7 +14,7 @@ import unittest
 import base  # noqa: F401  (puts the backend on sys.path)
 
 from clawcrew.errors import ValidationError
-from clawcrew.orgchart.authoring.importers import (
+from clawcrew.importers import (
     SOURCE_DIFY,
     SOURCE_N8N,
     ImportResult,
@@ -22,7 +22,7 @@ from clawcrew.orgchart.authoring.importers import (
     from_n8n,
     import_workflow,
 )
-from clawcrew.create.workflow.service import validate_definition
+from clawcrew.workflows import validate_definition
 
 N8N_EXPORT = {
     "name": "nightly research digest",

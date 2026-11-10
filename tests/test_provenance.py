@@ -15,8 +15,8 @@ import unittest
 import base  # noqa: F401
 from base import AppCase
 
-from clawcrew.comms.a2a import human as a2a_human
-from clawcrew.comms.a2a import protocol as spec
+from clawcrew import a2a_human
+from clawcrew import a2a_protocol as spec
 from clawcrew.errors import ValidationError
 
 

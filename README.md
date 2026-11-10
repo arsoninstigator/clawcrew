@@ -1,247 +1,288 @@
 # clawcrew
 
-※ a crew of ai agents that keeps a board, holds shifts, hands work over, and goes to
-sleep at night and comes back with a brief.
+![clawcrew](docs/clawcrew.png)
 
-## what is this
+clawcrew is an agentops platform that goes past multi-agent code orchestration in the
+ide. it finishes other kinds of work too, by putting agents from different verticals on
+the same problem and letting them collaborate.
 
-clawcrew is a backend for running a *team* of agents instead of a chat window.
+it does not ask you to babysit agents one turn at a time. crews are long running and
+self directed, and they operate inside a strict organisational chart: a real hmas where
+every agent has its own permissions, skills, experience and expertise. the platform is
+the thing that lets you customise each of those agents yourself, then put them into
+slack-like channels (andos) with no human in the loop, and let them form their own teams
+and channels, each with its own kanban board, to delegate work and close it.
 
-you give it a mission. it gives you a crew: agents with their own names, their own
-computer, their own skills, their own memory, and a shared kanban they actually work
-from. they talk to each other through agent to agent messages, they hand their cards
-over when a shift ends, they escalate to whoever is accountable, and every action
-lands in a hash chained audit row attached to the agent that did it.
+work itself follows the concepts humans already use for it: work shifts, handoffs
+between whoever is on duty, and the same accountability that comes from a real org chart.
+workflows, schedules, overnight shifts and triggers mean you do not have to keep the
+cloud running constantly to keep the crew working, and because every agent gets its own
+vm instead of sharing a single one, a shift change is not a shared box full of somebody
+else's processes.
 
-it is self hosted, byoc and byok. no credits, no per-seat, no hidden orchestration
-service in the middle. you bring the machines (or let clawcrew make one on the laptop
-you already have) and the model key, and everything else runs in your account.
-
-## the problem
-
-agents today are sessions. you open one, it does something, you close it, and the
-work evaporates into a transcript. three things break the moment you try to run more
-than one of them:
-
-**the mush.** every agent inherits the same instructions, the same tools, the same
-permissions, because they all read from one blob. two weeks later nobody can say why
-the writer has production database access. it is not that someone granted it, it is
-that nobody ever separated it.
-
-**no shift change.** an agent finishes a task and stops. the next task starts from
-zero, with no idea what the last one learned, what is blocked, or which human is
-waiting on an answer. a real team solves this with handovers. agents usually do not
-have one.
-
-**the human as middleware.** somebody has to read the board, notice the failure,
-reassign the card, ask for approval, and remember to check again tomorrow. that is
-not a job, it is a tax.
-
-clawcrew is built around the idea that these are structural problems, not prompt
-problems. you fix them with rows, keys and boundaries, not with better instructions.
-
-## what a crew actually is
+this repo is the backend half of that: teams of agents with real compute, not a chat
+wrapper. no frontend lives here yet, but every surface a frontend needs is an http route.
 
 ```
-crew
-├── agents            each with a permanent id, a computer, and nine namespaces
-├── channels          rooms with their own board, members, and conversation
-├── departments       who is accountable for what, nested, routable
-├── tasks             one kanban, sliced by channel, never duplicated
-├── workflows         json dags, gated by a human, published to a cron
-├── shifts            rotation, so coverage survives a failed beat
-└── the night         what ran while you slept, in numbers
+crew ──┬── agents ── computers (persistent)      ── runs ── kanban cards
+       ├── kanban board + append-only event log
+       ├── shared context store
+       ├── a2a log with a review gate
+       ├── workflows (json dag: agent_task, shell, set_context, human_gate, branch)
+       └── schedules (interval or cron) ── durable job queue
 ```
-
-## the nine namespaces, or: it never becomes mush
-
-every agent carries its own:
-
-- skills
-- scope and spec
-- memory
-- instructions
-- knowledge
-- permissions (oauth grants, mcps, apis, each with its own expiry)
-- tool access (a separate allowlist, not implied by permissions)
-- vertical
-- spawn policy (can this agent make subagents, and are they ephemeral or permanent)
-
-these are stored as rows keyed by that agent, in nine separate namespaces. there is no
-crew wide bucket an agent can write into, so there is nothing to blend. writes replace,
-they never deep merge. composition happens once and whole value, and when a composition
-loses a value the loser is reported as `shadowed` instead of quietly disappearing.
-
-`GET /agents/{id}/profile` returns the fingerprint of all nine, and
-`GET /crews/{id}/isolation` tells you whether two agents have drifted into being the
-same agent. subagents start with zero permissions, an off spawn policy, and a lineage
-row, so a child can never quietly inherit the parent's reach.
-
-## shifts and handoffs
-
-baristas do not vanish at the end of a shift. they hand over.
-
-a shift plan is a rotation: `slot_index = (now - anchor) // slot`. that is arithmetic,
-not a counter, so a duplicated beat cannot skew who is on duty. at the boundary the
-outgoing agent leaves a handoff: its open cards, what is blocked, what is waiting on a
-human, the last thing said in the room, and one line of next steps. accepting the
-handoff transfers the cards in a single transaction and writes an audit row.
-
-async means one owner per slot. sync means the whole rotation working the same board
-at the same time, with no acceptance needed.
-
-## the org chart
-
-a department has exactly one accountable coordinator, and departments nest. a card can
-be routed to the accountable head's desk, and escalation walks up the reporting line as
-a gated agent to agent message, so "ask your manager" is a real operation instead of a
-sentence in a prompt.
-
-## agent to agent, and the god view
-
-agents speak A2A on the wire: json rpc, agent cards, message parts, task states. that
-is the source of truth, and it is what an outside agent would see.
-
-humans get a different view of the same rows: sentences, in order, with the envelope
-kept beside each one. the rendering is never the record. if you delete the pretty
-version you lose nothing, because it was derived from the envelope on read.
-
-## the night
-
-a trigger is `event + condition + action + payload`. events come from the system
-(card moved, run finished, a2a received, gate decided) and from the clock. actions land
-on a real queue.
-
-celery is a core dependency with a beat ticking every fifteen seconds and a nightly
-event at 02:00 utc, plus a worker and redis in compose. the queue row is the source of
-truth, so a dead worker leaves a requeueable job rather than a lost one.
-
-the morning brief reads the night (18:00 to 06:00 by default, because "overnight" is a
-real interval) and reports numbers computed from rows: runs, failures, cards done, rules
-fired, and what is waiting on a person. prose is a rendering of those numbers and is
-dropped if it disagrees with them. it is delivered as a message in the crew's channel,
-so you read it where you already are.
-
-a fresh crew has no rules listening to the night, which is honest but useless, so
-`POST /crews/{id}/triggers/pack` installs the overnight pack: brief, failed run to a
-card, stale review nudge, and shift rollover. dry run first, by default.
-
-## approvals that do not require logging in
-
-a human gate is a token and a row. the token is signed and carries the decision it
-authorises, so one link means "approve" and another means "reject", and neither can be
-used twice. opening the link is a read. the button is a post. that is the whole flow:
-no account, no dashboard, no daily login.
-
-the parked run resumes when the tap lands, the gate records who and when, and the same
-row can be decided over the api by someone who does have an account.
-
-## knowledge, and who may read it
-
-a workspace connector points at your own notion workspace, a folder, a wiki endpoint, or
-any http documents source. sync pulls documents into rows, one per external id, updated
-in place.
-
-access is granted per agent, by the agent's supervisor, with an expiry, and revoked the
-same way. an agent with no grant is refused, and the refusal names the supervisor to ask.
-the grant is revocable because it is a row, not an env var.
-
-## maestro
-
-`POST /crews/{id}/ask` takes an outcome in a sentence and returns a reviewed plan: cards
-with titles, owners, channels, a definition of done, and dependencies. nothing runs.
-approving the ask is one more call and only then do the cards dispatch, in dependency
-order.
-
-it is deterministic by default. it reads assignment hints, deadline words, and
-dependencies out of the sentence, and it says "no agent available for writing" instead
-of inventing one.
-
-## coordination
-
-two primitives, because they are the two things a crew actually needs from a durable
-object: **a lease** (this card, this slot, this thread, one agent at a time, with an
-expiry so a crashed holder cannot hold the board hostage) and **an append only stream**
-(what the room said, in order, readable from a cursor).
-
-sqlite implements both by default, because a crew on one box should not need a cluster.
-the interface is four methods (`claim`, `release`, `append`, `read`), so a remote actor
-runtime is a second backend rather than a rewrite. `clawcrew coordinator` plans a self
-hosted terse durable actors runtime: their helm chart, on your gke, with your bucket, and
-`actor_contract()` records which actor holds which primitive. the transport is the one
-piece not wired, and the docs say so instead of pretending.
-
-## workflows
-
-a workflow is a json dag of seven node types, validated strictly at save time. agents
-can propose workflows, a human approves them, then `publish` binds a cron and the beat
-runs it. `human_gate` parks a run until the gate is decided. n8n and dify are called on
-your own instances, never copied in.
-
-## computers
-
-every agent gets a computer that keeps its files, its browser profile, and its installed
-tooling between tasks. some tasks want the opposite of persistence, so there are two
-lifecycles and orchestration never branches on vendor:
-
-- **persistent** - celesto's open source runtime, one microvm per agent
-- **disposable** - e2b's open source runtime, one per task, thrown away after
-
-provisioning is native, and it plans before it spends:
-
-```
-clawcrew targets                      what this machine can actually do
-clawcrew connect aws                  byoc in one step: detect, remember, stop
-clawcrew get persistent               print the plan, create nothing
-clawcrew get persistent --apply       create it (terraform in your own state)
-clawcrew get disposable --target e2b
-clawcrew destroy persistent clawcrew-1
-```
-
-targets are `local`, `celesto`, `e2b`, `docker`, `ssh`, `k8s`, `aws`, `gcp`, `azure`,
-`oracle`, and `superserve` (their sdk, their cloud, opt in, with desktop control and
-signed preview links so a human can look at what the agent built). the ssh target is the boring important one: any vps, bare metal box or machine
-under your desk that you already pay for. the cloud targets emit terraform you keep, so
-the machine is yours to destroy. a plan says what it needs out loud, for example that
-e2b's embed runtime needs `/dev/kvm`.
-
-## what is built, and what is not
-
-built and tested: crews, agents, nine namespaces, computers, kanban, channels, a2a with a
-human rendering, departments and routing, shifts and handoffs, audit chain, workflows with
-gates and publishing, triggers and the overnight pack, the brief, approvals by link,
-connectors with supervisor grants, maestro's ask, provisioning plans, and the http api
-plus cli.
-
-not built: the remote coordination transport (the local leases and streams ship, the
-actor runtime is planned and contracted, not dialled). the visual canvas. pov (the projection, the switcher page, the per agent api)
-exists, but the drag and drop builder does not, and neither does a profile editor ui for
-those nine namespaces. the calendar inside pov is derived from blocks, schedule targets
-and due dates, not synced from a calendar provider. the durable objects layer is designed
-and not written (see `docs/oss.md` for what it would sit on).
 
 ## quickstart
 
+```bash
+python -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"     # fastapi, uvicorn, httpx, attrs. no api keys, no docker
+
+python -m clawcrew.cli demo           # seed, run a task, run a workflow, review a message
+python -m clawcrew.cli seed           # a realistic crew you can poke at
+python -m clawcrew.cli inspect        # boards, review queues, context keys
+python -m clawcrew.cli serve          # http on :8000, docs at /docs
 ```
-pip install -e .
-clawcrew seed                 # a demo crew, a workflow, a few cards
-clawcrew demo                 # seed, run, review, end to end, no network
-clawcrew serve                # http api on :8000
-make test                     # the whole suite, offline
+
+for the deployment picture, including the celesto OSS runtime, your own e2b, and
+plugging in your n8n and dify, read `SELF_HOSTING.md`.
+
+no api keys are needed to run the demo: the deterministic model runs the real
+orchestrator, real sandbox and real review gate, it just does not call an llm. adding
+a `CELESTO_API_KEY` or `E2B_API_KEY` switches the same code path onto real compute,
+and `CLAWCREW_LLM_BASE_URL` switches the same code path onto a real model.
+
+## vendored provider clients
+
+the two hosted providers run on their vendors' **generated** openapi clients, copied
+into `clawcrew/vendor/` with their licences and provenance rather than reimplemented
+here:
+
+| package | upstream | licence |
+| --- | --- | --- |
+| `celesto_cloud_api` | CelestoAI/celesto `openapi/cloud.json` | Apache-2.0 |
+| `e2b_api` | e2b-dev/E2B `spec/openapi.yml` | MIT |
+| `a2a_types` | a2aproject/a2a-python, from the a2a json schema | Apache-2.0 |
+
+the point is not purity, it is that request paths and json bodies are built by code
+the vendor generates and tests. a contract change shows up as a diff in one vendored
+file instead of quietly rotting in a hand-written string. `tests/test_adapters.py`
+drives those real clients through an `httpx.MockTransport`, so it asserts the wire
+shape the vendor produces, not one we invented.
+
+`a2a_types` does the same job for the protocol layer: `a2a_protocol.validate_wire`
+round trips every outbound message, task and agent card through the official models,
+so the wire format cannot drift from the published schema. that check caught a real
+bug: the layer used to emit proto enums (`ROLE_AGENT`, `TASK_STATE_WORKING`), which
+the spec does not allow. it emits `agent` and `working` now, and still accepts the
+proto spellings on input.
+
+## concepts
+
+**crew** (`teams`) a named group with a mission, a review mode (`reviewed` or
+`open`), an orchestration policy, its own kanban columns, its own context.
+
+**agent** a specialist: role, skills, system prompt, a runtime (persistent computer
+or ephemeral), tools. three seed agents are enough to feel like a team: a
+researcher who cites, a writer who only writes from crew research, an operator who
+ships.
+
+**computer** a persistent sandbox per agent, provisioned once and reused. the
+agent's files and installed tooling survive between tasks. this is the celesto
+lifecycle, and by default it is celesto's OSS runtime on your own machine
+(`pip install celesto`, named microVMs, no account). see `SELF_HOSTING.md`.
+
+**task** a card. moving it is validated against a transition table, and every move
+writes an event, so the board is an audit log with a current-state projection.
+
+**run** one dispatch of one task by one agent: provider, sandbox id, per-turn
+steps, exit codes, stdout. runs are rows, not logs in a file, so you can query them.
+
+**a2a** every agent-to-agent message is a row with sender, recipient, task, thread.
+in a `reviewed` crew a message is `pending` and `inbox()` does not return it until
+someone approves it. that is the whole point: an unreviewed claim cannot change
+another agent's behaviour. on the wire it is spec-shaped a2a json over json-rpc
+(`/a2a/rpc`, agent cards at `/agents/{id}/card`).
+
+**channel** (an *ando* in the original brief) a room inside a crew: members, a
+conversation, and **its own board**. a
+task carries a `channel_id`, so `#growth` and `#support` keep separate kanbans while
+the crew board still shows everything. rooms are flat on purpose.
+
+**department** the hierarchy, kept explicit: one coordinator, members reporting to it,
+departments that nest. routing a card to a department puts it on the coordinator's
+desk, and escalation walks up the reporting line as a gated a2a message. hierarchy for
+accountability, channels for conversation.
+
+**pov** the workspace as one agent sees it: their board, their rooms, their calendar
+(derived from explicit blocks, schedule targets and card due dates), their inbox,
+their computer, the context they share, and only what needs attention. switching pov
+is a projection, never a login, which is why it is cheap and honest.
+
+**trigger** when this happens, queue that. `event` + exact-match `condition` +
+`action` + `payload` with `${path}` placeholders. card moves, room messages, finished
+workflows and the nightly beat all reach the same engine, and the queue is celery's.
+
+**profile** every agent carries its own nine namespaces: `skills`, `scope`, `memory`,
+`instructions`, `knowledge`, `perms`, `tools`, `vertical`, `spawn`. all of it is rows
+keyed by agent, so there is no crew-wide bucket an agent can write into and isolation
+is structural instead of a convention. writes replace, they never deep merge, and
+composition happens once, whole-value, with the losing default reported as `shadowed`.
+`GET /agents/{id}/profile` returns the config plus a fingerprint and the problems it can
+prove; `GET /crews/{id}/isolation` says whether two agents have become the same agent.
+
+**shift** coverage, the way a shop floor does it: a rotation, a slot length, and an
+arithmetic answer to "who is on the bar right now" (`slot_index = (now - anchor) //
+slot`, owner = `rotation[slot_index % len(rotation)]`). nothing about coverage is
+stored except the plan, so a duplicated beat cannot skew it and a missed beat cannot
+skip someone's shift.
+
+**handoff** the shift change, with a body. at every boundary the incoming agent gets a
+bundle: open cards (including the ones the outgoing agent was holding), what is
+blocked, what is waiting on a human, the room's last words, and a next-steps line.
+accepting it transfers the cards and writes an audit row. `mode: sync` means the whole
+rotation works the slot together, so nobody has to accept; `mode: async` is one owner
+per slot with a real handoff.
+
+**provenance** every agent has one permanent `agent_key` (alphanumeric, generated once,
+refused on update) plus a `scope` (permissions, channels, instructions, rules, data
+scope). every action it takes appends a row to its own hash chain, and `verify` recomputes
+the chain, so an edited history is detectable instead of deniable.
+
+**authoring** a workflow can be written by one or more agents (`POST
+/crews/{id}/workflows/propose`). it lands as `proposed` and is inert: `run` refuses it
+until a human calls `approve`. after that, `publish` binds a cron and the beat runs it.
+agents get authorship, humans keep the switch.
+
+**workflow** a dag of seven node types, validated on save (no cycles, no dangling
+deps), executed with a `human_gate` that pauses the run until decided. two of the
+seven hand a step to a tool you already run: `n8n` posts to a webhook on your n8n,
+`dify` runs a workflow on your dify.
+
+**schedule** interval or 5-field cron, durable, feeding the same job queue the api
+uses. `tick()` is idempotent; the queue claim is a single serialized update so two
+workers never take the same job.
+
+## api
+
+| route | what it does |
+| --- | --- |
+| `POST /crews` `GET /crews` `GET/PATCH /crews/{id}` | crews |
+| `POST /crews/{id}/agents` `GET .../agents` `PATCH /agents/{id}` | agents |
+| `POST /agents/{id}/computer` `GET /agents/{id}/computer` | persistent computer |
+| `GET/PUT /crews/{id}/context` | shared memory |
+| `POST /crews/{id}/tasks` `GET .../board` `POST /tasks/{id}/move` | kanban |
+| `POST /tasks/{id}/dispatch` `POST /crews/{id}/dispatch` | run work |
+| `GET /runs/{id}` `GET /tasks/{id}/runs` `GET /tasks/{id}/events` | inspection |
+| `POST /a2a` `GET /crews/{id}/a2a/review-queue` `POST /a2a/{id}/review` | a2a gate |
+| `GET /agents/{id}/inbox` `GET /threads/{id}` | approved messages only |
+| `POST /crews/{id}/workflows` `POST /workflows/{id}/run` | workflow dag |
+| `POST /workflow-runs/{id}/resume` | decide a human gate |
+| `POST /crews/{id}/schedules` `POST /ops/tick` `POST /ops/process` | scheduling |
+| `POST /crews/{id}/channels` `GET .../channels` `GET /channels/{id}/board` | rooms and their boards |
+| `POST /channels/{id}/messages` `GET .../messages` `POST /channels/{id}/tasks` | a room's talk and work |
+| `POST /crews/{id}/departments` `GET /crews/{id}/org-chart` `POST /tasks/{id}/route` | the hierarchy |
+| `POST /agents/{id}/escalate` | a member pushing a decision up the line |
+| `GET /agents/{id}/pov` `GET .../board` `GET/POST .../calendar` `GET /crews/{id}/roster` | point of view |
+| `POST /crews/{id}/triggers` `GET .../triggers` `POST /triggers/{id}/enable` | event rules |
+| `POST /crews/{id}/shift-plans` `GET /crews/{id}/coverage` `GET /shift-plans/{id}/schedule` | who is on duty, and when |
+| `POST /shift-plans/{id}/roll` `POST /handoffs/{id}/accept` `GET /agents/{id}/briefing` | shift changes |
+| `POST /crews/{id}/workflows/propose` `POST /workflows/{id}/approve` `POST /workflows/{id}/publish` | agents write, humans approve |
+| `GET /agents/{id}/provenance` `GET /agents/{id}/audit/verify` `GET /crews/{id}/audit` | the provenance chain |
+| `GET /crews/{id}/a2a/transcript` `GET /a2a/threads/{id}` | a2a as sentences, with envelopes |
+| `GET /ui/pov` | the served point-of-view switcher |
+| `GET /agents/{id}/profile` `PUT /agents/{id}/profile/{ns}/{key}` `GET /agents/{id}/effective` | per-agent config, and what it shadows |
+| `GET/POST /agents/{id}/memory` `GET/POST/DELETE /agents/{id}/grants` | memory and provider grants, per agent |
+| `PUT /agents/{id}/spawn-policy` `POST /agents/{id}/spawn` `GET /agents/{id}/lineage` | subagents, when allowed |
+| `GET /crews/{id}/isolation` | the anti-mush report |
+| `GET /health` `GET /providers` `GET /services` | ops, and which self-hosted tools are wired |
+
+`/docs` is the live openapi ui.
+
+## configuration
+
+every knob is an env var (see `.env.example`).
+
+| var | meaning |
+| --- | --- |
+| `CLAWCREW_DB` | sqlite path |
+| `CELESTO_API_KEY` | persistent computers; falls back to local when unset |
+| `E2B_API_KEY` | ephemeral sandboxes; falls back to local when unset |
+| `CLAWCREW_ALLOW_LOCAL_FALLBACK` | `false` makes a missing key a hard error |
+| `CLAWCREW_BROKER` | `inproc` (default) or `celery` |
+| `CELERY_BROKER_URL` `CELERY_QUEUE` | celery wiring |
+| `CLAWCREW_LLM_BASE_URL` `CLAWCREW_LLM_API_KEY` `CLAWCREW_LLM_MODEL` | any openai-compatible endpoint |
+| `CLAWCREW_API_TOKEN` | shared bearer token; `/health` stays open |
+| `CLAWCREW_REVIEW_MODE` | default review mode for new crews |
+| `CLAWCREW_MAX_PARALLEL` | concurrent dispatches per `dispatch_ready` |
+
+## scaling
+
+one process is enough for a small install: `uvicorn` for http, `clawcrew work` in a
+loop for the queue, `clawcrew tick` on a timer. to scale, point
+`CLAWCREW_BROKER=celery` at your existing cluster and run
+`celery -A clawcrew.jobs worker -Q clawcrew`. the sqlite queue stays the source of
+truth, so moving to celery changes who executes a job, never what a job means.
+
+## tests
+
+```bash
+cd backend && python -m unittest discover -s tests -p "test_*.py"
 ```
 
-the api is documented at `/docs` when the server is up. the cli and the api call the same
-service objects, so nothing is cli only or api only.
+## verified on a clean machine
 
-## where things live
+not "passes on my laptop": a disposable linux VM, fresh clone, nothing preinstalled:
 
-the repo is organised by what you are working on, not by file type: `create/` for making
-things, `orgchart/` for who answers for what, `comms/` for talking, `manage/` for operating
-agents, `work/` for the work itself. [`directory.md`](directory.md) is the map.
+```bash
+git clone https://github.com/arsoninstigator/clawcrew && cd clawcrew
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+make check            # vendor audit + suite
+python -m clawcrew.cli demo
+python -m clawcrew.cli serve
+```
 
-## licence and third party
+last run (2026-11-10, ubuntu 24.04, python 3.12, 2 vcpu): clone of the repo,
+install clean, `make check` 227 tests OK, server up, `/health`, `/providers`,
+`/services` answering, a crew created over http, `demo` completing a task through
+the review gate. that run is also what caught a missing dependency:
+`python-dateutil` was imported by the vendored e2b client and never declared, so
+the suite only passed where it happened to be installed already.
 
-clawcrew is Apache-2.0. vendored clients keep their own licences in `clawcrew/vendor/*/LICENSE`,
-their provenance next to them, and `THIRD_PARTY.md` lists what is copied, what is adapted,
-and what is only spoken to over an api. n8n and dify are source available, so only their
-export formats are imported here; the clients talk to instances you run.
+that vm had no nested virtualization, so celesto's microVMs cannot boot there. the
+persistent-computer path needs a host with `/dev/kvm`; the build check says so
+instead of pretending.
+
+309 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+against their real generated clients), the transition table, the a2a gate (pending
+must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
+workflow validation and gates, the n8n and dify importers, the n8n and dify
+self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, channel
+boards, department routing and escalation, the pov projection, the trigger engine and
+the celery beat, shift rotation and handoffs, the hash-chained audit trail, the a2a
+human rendering, agent-authored workflows with their approval gate, per-agent profile
+isolation and spawning, and the http surface including auth.
+
+## honest limits
+
+- **local provider is not a security boundary.** it runs through the host shell with
+  a binary allowlist. real isolation means celesto/e2b keys, and `isolation:
+  "ephemeral"` on untrusted work.
+- **self-hosted is the default, and it is a real dependency.** persistent computers
+  need the celesto runtime installed on the machine that runs agents
+  (`celesto doctor --strict`); without it the provider refuses instead of silently
+  running agent commands on the host. n8n and dify nodes need your instances and
+  their api keys, which `/services` reports honestly.
+- **the hosted adapters are unverified against the live services.** they run on the
+  vendors' own generated clients, so the shapes cannot be wrong the way a hand-typed
+  copy can, but no key was ever pointed at celesto or e2b from this repo: the tests
+  replay recorded request/response shapes through a mock transport. the first run
+  with real keys is still a real run. `e2b` command execution additionally needs
+  `pip install -e ".[e2b]"`, because commands go over envd, not the sandbox REST api.
+- **sqlite, single node.** deliberate for v1. the `Store` surface is narrow, so
+  postgres is a reimplementation of one class.
+- **one shared token, no users.** the backend expects to sit behind your own auth
+  proxy; multi-tenant scoping is a real design decision, not a bug fix.
+- **no canvas yet.** workflow definitions are the contract for one; nothing in the
+  engine assumes a specific editor.

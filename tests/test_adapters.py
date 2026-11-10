@@ -17,10 +17,10 @@ import httpx
 import base  # noqa: F401  (puts the backend on sys.path)
 
 from clawcrew.errors import ProviderFailure, ProviderNotConfigured
-from clawcrew.create.sandbox import Handle
-from clawcrew.create.sandbox.celesto import CelestoProvider
-from clawcrew.create.sandbox.e2b import E2BProvider
-from clawcrew.create.sandbox.transport import api_root
+from clawcrew.sandbox import Handle
+from clawcrew.sandbox.celesto import CelestoProvider
+from clawcrew.sandbox.e2b import E2BProvider
+from clawcrew.sandbox.transport import api_root
 
 CELESTO_COMPUTER = {
     "id": "cmp_1",

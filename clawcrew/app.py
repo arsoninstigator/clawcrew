@@ -10,30 +10,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from clawcrew.comms.a2a.service import A2AService
-from clawcrew.create.intake import AskService
-from clawcrew.create.coordination import SqliteCoordination
-from clawcrew.manage.provenance.service import AuditService
-from clawcrew.work.overnight.service import BriefService
-from clawcrew.manage.knowledge.service import ConnectorService
-from clawcrew.comms.channels.service import ChannelService
-from clawcrew.config import Settings
-from clawcrew.create.crew.service import CrewService
-from clawcrew.orgchart.department.service import DepartmentService
-from clawcrew.db import Store
-from clawcrew.errors import ClawCrewError
-from clawcrew.manage.approvals.service import GateService
-from clawcrew.work.tasks.service import KanbanService
-from clawcrew.create.agents.orchestrator import CrewRunner
-from clawcrew.manage.pov.service import PovService
-from clawcrew.manage.agent_profiles.service import ProfileService
-from clawcrew.create.agents.runtime import AgentModel
-from clawcrew.create.sandbox import ProviderRegistry, build_registry
-from clawcrew.work.schedule.service import Scheduler, Worker, make_broker
-from clawcrew.create.workflow.services import ServiceRegistry
-from clawcrew.work.shifts.service import ShiftService
-from clawcrew.work.triggers.service import TriggerService
-from clawcrew.create.workflow.service import WorkflowService
+from .a2a import A2AService
+from .audit import AuditService
+from .channels import ChannelService
+from .config import Settings
+from .crews import CrewService
+from .departments import DepartmentService
+from .db import Store
+from .errors import ClawCrewError
+from .kanban import KanbanService
+from .orchestrator import CrewRunner
+from .pov import PovService
+from .profile import ProfileService
+from .runtime import AgentModel
+from .sandbox import ProviderRegistry, build_registry
+from .scheduler import Scheduler, Worker, make_broker
+from .services import ServiceRegistry
+from .shifts import ShiftService
+from .triggers import TriggerService
+from .workflows import WorkflowService
 
 
 @dataclass
@@ -54,20 +49,13 @@ class App:
     audit: AuditService
     shifts: ShiftService
     profile: ProfileService
-    gates: GateService
-    brief: BriefService
-    connectors: ConnectorService
-    asks: AskService
-    coordination: SqliteCoordination
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
         whoever just came on shift. called by celery beat, by the cli, and by tests."""
         enqueued = self.scheduler.tick()
         handoffs = self.roll_shifts()
-        expired = self.gates.expire()
-        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs],
-                "gates_expired": expired}
+        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs]}
 
     def roll_shifts(self) -> list[dict]:
         rolled = []
@@ -104,12 +92,6 @@ class App:
             "audit_entries": n("agent_audit"),
             "profile_entries": n("agent_profile"),
             "spawns": n("agent_spawns"),
-            "asks": n("asks"),
-            "briefs": n("briefs"),
-            "gates": n("gates"),
-            "connectors": n("connectors"),
-            "knowledge_docs": n("knowledge_docs"),
-            "trigger_log": n("trigger_log"),
         }
 
 
@@ -143,33 +125,6 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     workflows.scheduler = scheduler
     workflows.audit = audit
 
-    # approval without a login: the link is the credential, the row is the record
-    gates = GateService(
-        store,
-        audit=audit,
-        secret=settings.gate_secret,
-        base_url=settings.public_base_url,
-        ttl_hours=settings.gate_ttl_hours,
-    )
-    gates.workflows = workflows
-    gates.channels = channels
-    workflows.gates = gates
-    workflows.channels = channels
-
-    brief = BriefService(store, crews, kanban=kanban, triggers=triggers, workflows=workflows,
-                         shifts=shifts, gates=gates, channels=channels,
-                         window_start_hour=settings.brief_window_start_hour,
-                         window_end_hour=settings.brief_window_end_hour)
-    connectors = ConnectorService(store, crews, profile, audit=audit)
-    connectors.departments = departments
-    asks = AskService(store, crews, kanban, runner, channels=channels,
-                      departments=departments, audit=audit)
-    worker.brief = brief
-    worker.shifts = shifts
-    worker.gates = gates
-    worker.channels = channels
-    runner.events_hook = lambda event, context: emit(event, context)
-
     def emit(event: str, context: dict | None = None):
         """one fan-out point: rules queue work, the audit chain records provenance."""
         fired = triggers.fire(event, context)
@@ -183,9 +138,6 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     workflows.events_hook = emit
     shifts.events_hook = emit
     profile.events_hook = emit
-    gates.events_hook = emit
-    connectors.events_hook = emit
-    asks.events_hook = emit
     return App(
         settings=settings,
         store=store,
@@ -205,9 +157,4 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit=audit,
         shifts=shifts,
         profile=profile,
-        gates=gates,
-        brief=brief,
-        connectors=connectors,
-        asks=asks,
-        coordination=SqliteCoordination(store),
     )

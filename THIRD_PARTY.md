@@ -37,18 +37,10 @@ competing hosted service, and dify's adds multi-tenant and branding conditions.
 neither can be relicensed into an Apache-2.0 backend. importing their *format* is
 interoperability, which is what users of an open tool actually need.
 
-## optional dependencies, never copied
-
-| project | licence | how clawcrew uses it |
-| --- | --- | --- |
-| [superserve-ai/superserve](https://github.com/superserve-ai/superserve) | Apache-2.0 | an **opt in** sandbox provider. `clawcrew/create/sandbox/superserve.py` imports their published python sdk and calls only documented methods. not vendored, not required; without the sdk the provider refuses with the install hint. |
-| [TerseAI/durable-actors](https://github.com/TerseAI/durable-actors) | MIT | a durable object runtime for coordination. `clawcrew/create/coordination/durable_actors.py` plans their published helm chart and records the actor contract; `CoordinationBackend` is the interface it would satisfy. their runtime and sdk are not copied and not imported. |
-
 ## checked, not used
 
 | project | licence | why nothing was taken |
 | --- | --- | --- |
-| [denoland/celld](https://github.com/denoland/celld), [rivet-gg/rivet](https://github.com/rivet-gg/rivet) | permissive (both) | self hostable durable object runtimes. not taken because `TerseAI/durable-actors` is a closer fit for the shape clawcrew needs (a class with durable state and serialized execution, streamed over websockets) and ships a helm chart. celld remains the fallback if the actor model ever stops being enough. |
 | [langflow-ai/langflow](https://github.com/langflow-ai/langflow) | MIT | a dag editor in python. nothing here is a canvas yet; when the canvas is built, this is the first place to port from, and MIT allows it. |
 | `orchestrator.inc`, `ando.so`, `zop.dev`, `celery.dev` | unknown | could not resolve a public repository or licence for these names, so nothing was taken and no claim is made about them. celery itself is BSD-3-Clause and is used as an optional broker, not vendored. |
 
