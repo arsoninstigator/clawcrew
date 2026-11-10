@@ -60,10 +60,10 @@ below.
 
 ---
 
-## 1. maestro, the front door
+## 1. the front door, one outcome in
 
 **purpose.** one sentence in, a staffed plan out. every entry point today is
-administrative: `POST /crews/{id}/tasks`, then `plan`, then `dispatch`. maestro is the
+administrative: `POST /crews/{id}/tasks`, then `plan`, then `dispatch`. the front door is the
 missing conversational intake: state an outcome, it gets torn into cards, placed in
 channels and departments, assigned, and optionally dispatched.
 
@@ -295,7 +295,7 @@ each step is verified on a clean vm before the next one starts:
 
 1. overnight pack and the brief service. backend only, and it answers the only
    question that matters at 3am: did anything happen.
-2. maestro `/ask`. the first entry point a non-technical operator can use.
+2. the front door `/ask`. the first entry point a non-technical operator can use.
 3. canvas a: pov shell and the profile editor.
 4. canvas b: the graph editor.
 

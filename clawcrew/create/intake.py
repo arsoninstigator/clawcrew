@@ -151,7 +151,7 @@ class AskService:
                 if self.departments is not None:
                     dept = self.departments.department_for_agent(assignee["id"])
                     department = dept["name"] if dept else None
-                self.kanban.assign(card["id"], assignee["id"], actor="maestro")
+                self.kanban.assign(card["id"], assignee["id"], actor="intake")
             entry = {
                 "task_id": card["id"],
                 "title": card["title"],
@@ -196,7 +196,7 @@ class AskService:
             "ask_id": ask_id, "text": str(text).strip(), "mode": mode,
             "plan": [{"task_id": p["task_id"], "title": p["title"]} for p in plan],
             "created_by": actor, "at": now(),
-        }, author=f"maestro:{actor}")
+        }, author=f"intake:{actor}")
         dispatched = 0
         if mode == "dispatch":
             dispatched = len(self.dispatch(ask_id)["dispatched"])
@@ -241,7 +241,7 @@ class AskService:
                 continue
             try:
                 if card["column"] == "backlog":
-                    card = self.kanban.move(card["id"], "ready", "maestro")
+                    card = self.kanban.move(card["id"], "ready", "intake")
                 outcome = self.runner.dispatch(card["id"])
             except Exception as exc:  # noqa: BLE001 - one card must not stop the ask
                 skipped.append({"task_id": card["id"], "error": f"{type(exc).__name__}: {exc}"})

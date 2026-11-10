@@ -1,4 +1,4 @@
-"""maestro's front door: an outcome in, a reviewed plan out."""
+"""the front door: an outcome in, a reviewed plan out."""
 
 from __future__ import annotations
 

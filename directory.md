@@ -22,7 +22,7 @@ clawcrew/
 │   │   └── services/          n8n and dify clients (your instance, their api)
 │   ├── sandbox/               provider registry, celesto, e2b, local, http
 │   │   └── provision.py       native byoc provisioning: plan, apply, destroy, connect
-│   └── intake.py              maestro: an outcome in, a reviewed plan out
+│   └── intake.py              the front door: an outcome in, a reviewed plan out
 │
 ├── orgchart/                  who answers for what
 │   ├── department/            coordinators, nesting, routing, escalation
