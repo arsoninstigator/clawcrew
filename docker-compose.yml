@@ -1,0 +1,58 @@
+# the clawcrew services. everything here is ours; the tools it plugs into are yours.
+#
+#   docker compose up -d                      api + worker + ticker
+#   docker compose --profile workflows up -d  ... plus a self-hosted n8n on :5678
+#
+# dify is not defined here on purpose: it is a stack (api, worker, web, postgres,
+# redis, vector store), not one container. run their docker/docker-compose.yaml,
+# then point CLAWCREW_DIFY_BASE_URL at it. see SELF_HOSTING.md.
+#
+# celesto's runtime boots local microVMs, so it belongs on the host with /dev/kvm,
+# not inside this compose file: pip install celesto && celesto setup. the containers
+# reach it through the CLI only if the image has it; that is why the default
+# deployment runs agents' persistent computers from a worker on the host, or from a
+# worker with the kvm device mapped (see the commented block on `worker`).
+
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    volumes: ["clawcrew-data:/data"]
+    restart: unless-stopped
+
+  # drains the durable queue (scheduled jobs, dispatches)
+  worker:
+    build: .
+    env_file: [.env]
+    volumes: ["clawcrew-data:/data"]
+    command: ["sh", "-c", "while true; do python -m clawcrew.cli work --limit 20 || true; sleep 5; done"]
+    restart: unless-stopped
+    # to run persistent computers from this container instead of the host:
+    #   build arg INSTALL_CELESTO=true, plus:
+    # devices: ["/dev/kvm:/dev/kvm"]
+
+  # enqueues anything due. idempotent, so a 15s loop is fine
+  ticker:
+    build: .
+    env_file: [.env]
+    volumes: ["clawcrew-data:/data"]
+    command: ["sh", "-c", "while true; do python -m clawcrew.cli tick || true; sleep 15; done"]
+    restart: unless-stopped
+
+  # optional: your own n8n, for the `n8n` workflow node
+  n8n:
+    profiles: ["workflows"]
+    image: docker.n8n.io/n8nio/n8n:latest
+    ports: ["5678:5678"]
+    environment:
+      - N8N_SECURE_COOKIE=false
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - GENERIC_TIMEZONE=UTC
+    volumes: ["n8n-data:/home/node/.n8n"]
+    restart: unless-stopped
+
+volumes:
+  clawcrew-data:
+  n8n-data:

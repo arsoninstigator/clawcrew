@@ -1,0 +1,31 @@
+clawcrew
+copyright 2026 the clawcrew authors
+
+this product includes code and work derived from the projects listed below. full
+text of every license referenced here is in LICENSES/ or next to the vendored code.
+
+vendored code, copied into clawcrew/vendor/ with its upstream license:
+
+  Celesto (CelestoAI/celesto)                   Apache-2.0
+    clawcrew/vendor/celesto_cloud_api           generated from openapi/cloud.json
+
+  E2B (e2b-dev/E2B)                             MIT
+    clawcrew/vendor/e2b_api                     generated from spec/openapi.yml
+
+  A2A Python SDK (a2aproject/a2a-python)         Apache-2.0
+    clawcrew/vendor/a2a_types                   generated from the a2a json schema
+
+semantics ported, no source copied:
+
+  Vibe Kanban (BloopAI/vibe-kanban)             Apache-2.0
+  Buzz (block/buzz)                             Apache-2.0
+  A2A specification (a2aproject/A2A)            Apache-2.0
+
+the following projects' file formats are supported but no code was taken from them,
+because their licenses are not compatible with redistribution here:
+
+  n8n (n8n-io/n8n)                              Sustainable Use License
+  Dify (langgenius/dify)                        Dify Open Source License
+
+see THIRD_PARTY.md for exactly what was used and how, and
+clawcrew/vendor/*/PROVENANCE.md for the commit each vendored package came from.
