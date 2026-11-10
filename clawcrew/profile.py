@@ -52,7 +52,7 @@ NAMESPACES = (
     "spawn",
 )
 
-PERM_KINDS = ("access", "oauth", "mcps", "apis")
+PERM_KINDS = ("access", "oauth", "mcps", "apis", "connectors")
 SPAWN_MODES = ("ephemeral", "permanent")
 
 DEFAULT_PERMISSIONS = {

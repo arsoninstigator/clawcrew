@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .a2a import A2AService
+from .create.coordination import SqliteCoordination
+from .create.intake import AskService
+from .manage.approvals.service import GateService
+from .manage.knowledge.service import ConnectorService
+from .work.overnight.service import BriefService
 from .audit import AuditService
 from .channels import ChannelService
 from .config import Settings
@@ -49,13 +54,20 @@ class App:
     audit: AuditService
     shifts: ShiftService
     profile: ProfileService
+    gates: GateService
+    brief: BriefService
+    connectors: ConnectorService
+    asks: AskService
+    coordination: SqliteCoordination
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
         whoever just came on shift. called by celery beat, by the cli, and by tests."""
         enqueued = self.scheduler.tick()
         handoffs = self.roll_shifts()
-        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs]}
+        expired = self.gates.expire()
+        return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs],
+                "gates_expired": expired}
 
     def roll_shifts(self) -> list[dict]:
         rolled = []
@@ -92,6 +104,11 @@ class App:
             "audit_entries": n("agent_audit"),
             "profile_entries": n("agent_profile"),
             "spawns": n("agent_spawns"),
+            "asks": n("asks"),
+            "gates": n("gates"),
+            "briefs": n("briefs"),
+            "connectors": n("connectors"),
+            "knowledge_docs": n("knowledge_docs"),
         }
 
 
@@ -131,6 +148,34 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit.record_event(event, context)
         return fired
 
+    gates = GateService(store, audit=audit, secret=settings.gate_secret,
+                        base_url=settings.public_base_url,
+                        ttl_hours=settings.gate_ttl_hours, events_hook=emit)
+    gates.workflows = workflows
+    gates.channels = channels
+
+    brief = BriefService(store, crews, kanban=kanban, triggers=triggers,
+                         workflows=workflows, shifts=shifts, gates=gates,
+                         channels=channels,
+                         window_start_hour=settings.brief_window_start_hour,
+                         window_end_hour=settings.brief_window_end_hour)
+
+    connectors = ConnectorService(store, crews=crews, profile=profile, audit=audit,
+                                 events_hook=emit)
+    connectors.departments = departments
+
+    asks = AskService(store, crews, kanban, runner, channels=channels,
+                      departments=departments, audit=audit, events_hook=emit)
+    coordination = SqliteCoordination(store)
+
+    worker.brief = brief
+    worker.shifts = shifts
+    worker.gates = gates
+    worker.channels = channels
+    runner.events_hook = emit
+    workflows.gates = gates
+    workflows.channels = channels
+
     kanban.events_hook = emit
     channels.events_hook = emit
     departments.events_hook = emit
@@ -157,4 +202,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit=audit,
         shifts=shifts,
         profile=profile,
+        gates=gates,
+        brief=brief,
+        connectors=connectors,
+        asks=asks,
+        coordination=coordination,
     )

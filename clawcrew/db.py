@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 create table if not exists meta (
@@ -365,7 +365,94 @@ create table if not exists job_queue (
     available_at real not null,
     created_date real not null
 );
-"""
+
+create table if not exists gates (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    run_id text not null default '',
+    node_id text not null default '',
+    title text not null default '',
+    prompt text not null default '',
+    options text not null default '["approve","reject"]',
+    channel_id text,
+    status text not null default 'open',
+    decided text not null default '',
+    decided_by text not null default '',
+    decided_date real,
+    note text not null default '',
+    expires_at real not null,
+    created_date real not null
+);
+create table if not exists gate_tokens (
+    nonce text primary key,
+    gate_id text not null references gates(id) on delete cascade,
+    decision text not null,
+    used_at real,
+    created_date real not null
+);
+create table if not exists asks (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    text text not null,
+    mode text not null default 'plan',
+    interpretation text not null default '{}',
+    plan text not null default '[]',
+    status text not null default 'planned',
+    created_by text not null default 'owner',
+    idempotency_key text not null default '',
+    created_date real not null
+);
+create table if not exists briefs (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    date text not null,
+    window_from real not null,
+    window_to real not null,
+    numbers text not null default '{}',
+    prose text not null default '',
+    created_date real not null,
+    unique (team_id, date)
+);
+create table if not exists connectors (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    kind text not null,
+    name text not null,
+    config text not null default '{}',
+    secret_env text not null default '',
+    status text not null default 'connected',
+    last_sync real,
+    doc_count integer not null default 0,
+    created_date real not null,
+    unique (team_id, name)
+);
+create table if not exists knowledge_docs (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    connector_id text not null references connectors(id) on delete cascade,
+    external_id text not null,
+    title text not null default '',
+    url text not null default '',
+    text text not null default '',
+    checksum text not null default '',
+    updated_at real not null,
+    fetched_at real not null,
+    unique (connector_id, external_id)
+);
+create table if not exists trigger_log (
+    id text primary key,
+    team_id text not null,
+    trigger_id text not null,
+    event text not null,
+    action text not null,
+    job_id text not null default '',
+    created_date real not null
+);
+
+create index if not exists asks_team on asks (team_id, created_date);
+create index if not exists gates_open on gates (team_id, status, expires_at);
+create index if not exists knowledge_team on knowledge_docs (team_id, connector_id);
+create index if not exists trigger_log_team on trigger_log (team_id, created_date);"""
 
 
 def new_id(prefix: str) -> str:

@@ -32,6 +32,7 @@ from .sandbox import Handle, ProviderRegistry
 
 
 class CrewRunner:
+    events_hook = None
     def __init__(
         self,
         store: Store,
@@ -158,6 +159,11 @@ class CrewRunner:
             error = f"{exc.code}: {exc.message}"
             self._update_run(run_id, steps, status="failed", error=error)
             self.kanban.move(task_id, "blocked", agent["id"], note=error[:500])
+            if self.events_hook is not None:
+                self.events_hook("run.failed", {
+                    "team_id": task["team_id"], "task_id": task_id, "run_id": run_id,
+                    "agent_id": agent["id"], "error": error, "actor": agent["id"],
+                })
             self.crews.update_agent(agent["id"], status="idle")
             raise
         finally:

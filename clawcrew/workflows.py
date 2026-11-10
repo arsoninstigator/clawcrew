@@ -103,6 +103,8 @@ def validate_definition(definition: Any) -> dict:
 
 
 class WorkflowService:
+    gates = None      # GateService, injected by the composition root
+    channels = None   # ChannelService, for gate delivery
     def __init__(self, store: Store, runner: CrewRunner, services=None):
         self.store = store
         self.runner = runner
@@ -357,6 +359,7 @@ class WorkflowService:
         definition = workflow["definition"]
         run_id = new_id("wfr")
         state: dict[str, Any] = {
+            "run_id": run_id,
             "trigger": trigger_payload or {},
             "nodes": {},
             "outputs": {},
@@ -432,7 +435,12 @@ class WorkflowService:
                     column="review" if "review" in self.kanban.columns(workflow["team_id"]) else "in_progress",
                     payload={"workflow_run": state.get("run_id"), "node": node["id"]},
                 )
-                return {"status": "waiting", "task_id": task["id"]}
+                outcome = {"status": "waiting", "task_id": task["id"]}
+                gate = self._open_gate(workflow, node, state, task)
+                if gate:
+                    outcome["gate_id"] = gate["id"]
+                    outcome["gate_links"] = gate.get("links", {})
+                return outcome
             if kind == "n8n":
                 return self._node_n8n(workflow, node, state)
             if kind == "dify":
@@ -444,6 +452,54 @@ class WorkflowService:
             return {"status": "failed", "error": f"unhandled node type {kind}"}
         except Exception as exc:  # node failure must not kill the run silently
             return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+
+
+    def _open_gate(self, workflow: dict, node: dict, state: dict, task: dict) -> dict | None:
+        """the gate is a link, not a dashboard visit.
+
+        the card in `review` is the record; the gate is the question, and the links
+        in it are the answer. if a crew has a channel with humans in it, the question
+        is posted there too, because a link nobody sees is a run nobody finishes.
+        """
+        if self.gates is None:
+            return None
+        title = self._render(node.get("title") or f"approve {node['id']}", state) or ""
+        description = self._render(node.get("description") or "", state) or ""
+        gate = self.gates.open(
+            team_id=workflow["team_id"],
+            title=str(title),
+            prompt=str(description),
+            run_id=str(state.get("run_id") or ""),
+            node_id=node["id"],
+            options=node.get("options") or ["approve", "reject"],
+            channel_id=node.get("channel_id"),
+        )
+        channel_id = node.get("channel_id") or self._first_channel(workflow["team_id"])
+        if channel_id:
+            links = gate.get("links", {})
+            lines = [f"needs a decision: {title}"]
+            for decision, url in links.items():
+                lines.append(f"{decision}: {url}")
+            lines.append("one tap, no login. the link works once.")
+            try:
+                self.gates.channels.post(
+                    channel_id,
+                    "\n".join(lines),
+                    author_kind="system",
+                    task_id=task["id"],
+                )
+            except Exception:  # noqa: BLE001 - a delivery failure is not a gate failure
+                pass
+        return gate
+
+    def _first_channel(self, team_id: str) -> str | None:
+        if self.gates is None or self.gates.channels is None:
+            return None
+        try:
+            channels = self.gates.channels.list(team_id)
+        except Exception:  # noqa: BLE001
+            return None
+        return channels[0]["id"] if channels else None
 
     def _node_n8n(self, workflow: dict, node: dict, state: dict) -> dict:
         """delegate one step to a workflow that already lives in n8n."""
@@ -575,6 +631,16 @@ class WorkflowService:
                      "workflow_id": row["workflow_id"], "name": row["name"],
                      "status": status, "state": state},
                 )
+                if status == "failed":
+                    failed = [nid for nid, out in (state.get("nodes") or {}).items()
+                              if (out or {}).get("status") == "failed"]
+                    first = (state.get("nodes") or {}).get(failed[0], {}) if failed else {}
+                    self.events_hook(
+                        "run.failed",
+                        {"team_id": row["team_id"], "workflow_id": row["workflow_id"],
+                         "run_id": row["id"], "task_id": "", "node_id": failed[0] if failed else "",
+                         "error": str((first or {}).get("error") or f"{row['name']} failed")[:300]},
+                    )
 
     def get_run(self, run_id: str) -> dict:
         row = self.store.one("select * from workflow_runs where id = ?", (run_id,))
@@ -600,6 +666,11 @@ class WorkflowService:
             raise ValidationError("decision must be 'approved' or 'rejected'")
         if node.get("task_id"):
             self.kanban.move(node["task_id"], "done", "owner", note=note)
+        if self.gates is not None and node.get("gate_id"):
+            try:
+                self.gates.decide(node["gate_id"], decision=decision, actor="owner", note=note)
+            except Exception:  # noqa: BLE001 - already decided via the link is the normal case
+                pass
         state["nodes"][node_id] = {"status": "succeeded" if decision == "approved" else "failed",
                                    "decision": decision, "note": note,
                                    "task_id": node.get("task_id")}
