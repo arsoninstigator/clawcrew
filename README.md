@@ -150,6 +150,30 @@ truth, so moving to celery changes who executes a job, never what a job means.
 cd backend && python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## verified on a clean machine
+
+not "passes on my laptop": a disposable linux VM, fresh clone, nothing preinstalled:
+
+```bash
+git clone https://github.com/arsoninstigator/clawcrew && cd clawcrew
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+make check            # vendor audit + suite
+python -m clawcrew.cli demo
+python -m clawcrew.cli serve
+```
+
+last run (2026-11-10, ubuntu 24.04, python 3.12, 2 vcpu): clone of 714 files,
+install clean, `make check` 227 tests OK, server up, `/health`, `/providers`,
+`/services` answering, a crew created over http, `demo` completing a task through
+the review gate. that run is also what caught a missing dependency:
+`python-dateutil` was imported by the vendored e2b client and never declared, so
+the suite only passed where it happened to be installed already.
+
+that vm had no nested virtualization, so celesto's microVMs cannot boot there. the
+persistent-computer path needs a host with `/dev/kvm`; the build check says so
+instead of pretending.
+
 227 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
