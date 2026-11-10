@@ -37,6 +37,10 @@ from .sandbox import Handle
 from .services import build_services
 
 NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n", "dify"}
+
+# draft: a human sketch. proposed: handed in by agents, waiting on approval.
+# active: runs. archived: kept, never runs.
+STATUSES = ("draft", "proposed", "active", "archived")
 TEMPLATE = re.compile(r"\$\{([a-zA-Z0-9_.\-]+)\}")
 
 
@@ -104,29 +108,45 @@ class WorkflowService:
         self.runner = runner
         self.services = services if services is not None else build_services()
         self.events_hook = None
+        self.audit = None
+        self.scheduler = None
         self.crews = CrewService(store, getattr(runner, "registry", None))
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
 
     # ---- crud ----------------------------------------------------------
-    def save(self, team_id: str, name: str, definition: dict) -> dict:
+    def save(
+        self,
+        team_id: str,
+        name: str,
+        definition: dict,
+        status: str | None = None,
+        proposed_by_agent_id: str | None = None,
+    ) -> dict:
         self.crews.get_team(team_id)
         validate_definition(definition)
+        if status is not None and status not in STATUSES:
+            raise ValidationError(f"status must be one of {sorted(STATUSES)}")
         existing = self.store.one("select * from workflows where team_id = ? and name = ?", (team_id, name))
         ts = now()
         if existing:
+            # editing a workflow never quietly promotes it: only approve() does that.
             with self.store.tx() as c:
                 c.execute(
-                    "update workflows set definition = ?, version = version + 1, updated_date = ? where id = ?",
+                    """update workflows set definition = ?, version = version + 1, updated_date = ?
+                       where id = ?""",
                     (dumps(definition), ts, existing["id"]),
                 )
             return self.get(existing["id"])
         workflow_id = new_id("wf")
         with self.store.tx() as c:
             c.execute(
-                """insert into workflows (id, team_id, name, version, definition, created_date, updated_date)
-                   values (?,?,?,1,?,?,?)""",
-                (workflow_id, team_id, name, dumps(definition), ts, ts),
+                """insert into workflows
+                   (id, team_id, name, version, definition, status, proposed_by_agent_id,
+                    created_date, updated_date)
+                   values (?,?,?,1,?,?,?,?,?)""",
+                (workflow_id, team_id, name, dumps(definition), status or "active",
+                 proposed_by_agent_id, ts, ts),
             )
         return self.get(workflow_id)
 
@@ -137,20 +157,203 @@ class WorkflowService:
         return {
             "id": row["id"], "team_id": row["team_id"], "name": row["name"],
             "version": row["version"], "definition": loads(row["definition"], {}),
+            "status": row["status"] if "status" in row.keys() else "active",
+            "proposed_by_agent_id": row["proposed_by_agent_id"] if "proposed_by_agent_id" in row.keys() else None,
+            "approved_by": row["approved_by"] if "approved_by" in row.keys() else "",
+            "approved_date": row["approved_date"] if "approved_date" in row.keys() else None,
+            "coauthors": self.coauthors(row["id"]),
             "created_date": row["created_date"], "updated_date": row["updated_date"],
         }
 
-    def list(self, team_id: str) -> list[dict]:
-        return [
-            {"id": r["id"], "name": r["name"], "version": r["version"], "updated_date": r["updated_date"]}
-            for r in self.store.query(
+    def list(self, team_id: str, status: str | None = None) -> list[dict]:
+        if status:
+            if status not in STATUSES:
+                raise ValidationError(f"status must be one of {sorted(STATUSES)}")
+            rows = self.store.query(
+                "select * from workflows where team_id = ? and status = ? order by created_date",
+                (team_id, status),
+            )
+        else:
+            rows = self.store.query(
                 "select * from workflows where team_id = ? order by created_date", (team_id,)
             )
+        return [
+            {
+                "id": r["id"], "name": r["name"], "version": r["version"],
+                "status": r["status"] if "status" in r.keys() else "active",
+                "updated_date": r["updated_date"],
+            }
+            for r in rows
         ]
+
+    # ---- authoring: an agent can write one, a human still turns it on ----
+    def propose(
+        self,
+        team_id: str,
+        name: str,
+        definition: dict,
+        agent_ids: list[str],
+        note: str = "",
+    ) -> dict:
+        """one or more agents hand in a workflow. it is inert until approved."""
+        if not agent_ids:
+            raise ValidationError("a proposal needs at least one authoring agent")
+        for agent_id in agent_ids:
+            agent = self.crews.get_agent(agent_id)
+            if agent["team_id"] != team_id:
+                raise ValidationError("authoring agents must be in the crew")
+        workflow = self.save(
+            team_id, name, definition, status="proposed", proposed_by_agent_id=agent_ids[0]
+        )
+        if workflow["status"] != "proposed":
+            raise ValidationError(
+                f"workflow '{name}' is already {workflow['status']}; propose under a new name"
+            )
+        with self.store.tx() as c:
+            c.execute("update workflows set status = 'proposed', proposed_by_agent_id = ? where id = ?",
+                      (agent_ids[0], workflow["id"]))
+            for agent_id in agent_ids:
+                c.execute(
+                    """insert into workflow_coauthors (workflow_id, agent_id, role, verdict, note, created_date)
+                       values (?,?,'author','pending',?,?)
+                       on conflict(workflow_id, agent_id) do update set role = 'author'""",
+                    (workflow["id"], agent_id, note, now()),
+                )
+        proposed = self.get(workflow["id"])
+        if self.audit is not None:
+            for agent_id in agent_ids:
+                self.audit.record(
+                    team_id=team_id, agent_id=agent_id, action="workflow.proposed",
+                    target_kind="workflow", target_id=workflow["id"],
+                    payload={"name": name, "note": note, "authors": agent_ids},
+                )
+        self._emit("workflow.proposed", {"team_id": team_id, "workflow_id": workflow["id"],
+                                         "name": name, "authors": agent_ids})
+        return proposed
+
+    def coauthors(self, workflow_id: str) -> list[dict]:
+        rows = self.store.query(
+            """select c.*, a.name, a.agent_key from workflow_coauthors c
+               join agents a on a.id = c.agent_id where c.workflow_id = ?
+               order by c.created_date""",
+            (workflow_id,),
+        )
+        return [
+            {"agent_id": r["agent_id"], "name": r["name"], "agent_key": r["agent_key"],
+             "role": r["role"], "verdict": r["verdict"], "note": r["note"]}
+            for r in rows
+        ]
+
+    def review(self, workflow_id: str, agent_id: str, verdict: str, note: str = "") -> dict:
+        """a co-author signing off on someone else's draft. recorded, not decisive."""
+        if verdict not in {"approved", "changes_requested"}:
+            raise ValidationError("verdict must be 'approved' or 'changes_requested'")
+        workflow = self.get(workflow_id)
+        if not any(c["agent_id"] == agent_id for c in workflow["coauthors"]):
+            raise ValidationError("that agent is not a co-author of this workflow")
+        with self.store.tx() as c:
+            c.execute(
+                """update workflow_coauthors set verdict = ?, note = ?
+                   where workflow_id = ? and agent_id = ?""",
+                (verdict, note, workflow_id, agent_id),
+            )
+        refreshed = self.get(workflow_id)
+        refreshed["ready_for_approval"] = self.ready_for_approval(refreshed)
+        return refreshed
+
+    def ready_for_approval(self, workflow: dict) -> bool:
+        verdicts = [c["verdict"] for c in workflow.get("coauthors") or []]
+        return bool(verdicts) and all(v in {"approved", "pending"} for v in verdicts) and any(
+            v == "approved" for v in verdicts
+        )
+
+    def approve(self, workflow_id: str, actor: str = "owner", note: str = "") -> dict:
+        workflow = self.get(workflow_id)
+        if workflow["status"] == "active":
+            return workflow
+        if workflow["status"] not in {"draft", "proposed"}:
+            raise ValidationError(f"cannot approve a workflow that is {workflow['status']}")
+        with self.store.tx() as c:
+            c.execute(
+                """update workflows set status = 'active', approved_by = ?, approved_date = ?,
+                       updated_date = ? where id = ?""",
+                (actor, now(), now(), workflow_id),
+            )
+        approved = self.get(workflow_id)
+        proposer = approved.get("proposed_by_agent_id")
+        if self.audit is not None and proposer:
+            self.audit.record(
+                team_id=approved["team_id"], agent_id=proposer, action="workflow.approved",
+                actor_kind="human" if not str(actor).startswith("agent_") else "agent",
+                actor_id=actor, target_kind="workflow", target_id=workflow_id,
+                payload={"name": approved["name"], "note": note},
+            )
+        self._emit("workflow.approved", {"team_id": approved["team_id"],
+                                         "workflow_id": workflow_id, "name": approved["name"],
+                                         "actor": actor})
+        return approved
+
+    def reject(self, workflow_id: str, actor: str = "owner", note: str = "") -> dict:
+        workflow = self.get(workflow_id)
+        with self.store.tx() as c:
+            c.execute(
+                "update workflows set status = 'draft', updated_date = ? where id = ?",
+                (now(), workflow_id),
+            )
+        rejected = self.get(workflow_id)
+        proposer = rejected.get("proposed_by_agent_id")
+        if self.audit is not None and proposer:
+            self.audit.record(
+                team_id=rejected["team_id"], agent_id=proposer, action="workflow.rejected",
+                actor_kind="human", actor_id=actor, target_kind="workflow",
+                target_id=workflow_id, payload={"note": note, "name": workflow["name"]},
+            )
+        return rejected
+
+    def publish(self, workflow_id: str, spec: str = "", kind: str = "cron",
+                schedule_name: str | None = None) -> dict:
+        """make it run itself. this is the step that turns an approved draft into a
+        standing job: one schedule row, and the beat does the rest.
+
+        with no spec, the workflow is only marked runnable (status stays active and a
+        schedule is created only if one is already bound).
+        """
+        workflow = self.get(workflow_id)
+        if workflow["status"] != "active":
+            raise ValidationError("approve the workflow before it can run on a schedule")
+        if not spec:
+            return {"workflow": workflow, "schedule": None}
+        if self.scheduler is None:
+            raise ValidationError("publishing a schedule needs the scheduler")
+        name = schedule_name or f"workflow:{workflow['name']}"
+        template = {"kind": "workflow", "workflow_id": workflow_id}
+        existing = next(
+            (s for s in self.scheduler.list(workflow["team_id"]) if s["name"] == name), None
+        )
+        if existing:
+            with self.store.tx() as c:
+                c.execute(
+                    "update schedules set spec = ?, task_template = ?, kind = ?, enabled = 1 where id = ?",
+                    (str(spec), dumps(template), kind, existing["id"]),
+                )
+            schedule = self.scheduler.get(existing["id"])
+        else:
+            schedule = self.scheduler.create(
+                workflow["team_id"], name, kind, str(spec), task_template=template
+            )
+        return {"workflow": workflow, "schedule": schedule}
+
+    def _emit(self, event: str, context: dict) -> None:
+        if self.events_hook:
+            self.events_hook(event, context)
 
     # ---- execution -----------------------------------------------------
     def run(self, workflow_id: str, trigger_payload: dict | None = None) -> dict:
         workflow = self.get(workflow_id)
+        if workflow["status"] != "active":
+            raise ValidationError(
+                f"workflow '{workflow['name']}' is {workflow['status']}; approve it before running"
+            )
         definition = workflow["definition"]
         run_id = new_id("wfr")
         state: dict[str, Any] = {

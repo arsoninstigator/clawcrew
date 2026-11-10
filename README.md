@@ -108,6 +108,29 @@ is a projection, never a login, which is why it is cheap and honest.
 `action` + `payload` with `${path}` placeholders. card moves, room messages, finished
 workflows and the nightly beat all reach the same engine, and the queue is celery's.
 
+**shift** coverage, the way a shop floor does it: a rotation, a slot length, and an
+arithmetic answer to "who is on the bar right now" (`slot_index = (now - anchor) //
+slot`, owner = `rotation[slot_index % len(rotation)]`). nothing about coverage is
+stored except the plan, so a duplicated beat cannot skew it and a missed beat cannot
+skip someone's shift.
+
+**handoff** the shift change, with a body. at every boundary the incoming agent gets a
+bundle: open cards (including the ones the outgoing agent was holding), what is
+blocked, what is waiting on a human, the room's last words, and a next-steps line.
+accepting it transfers the cards and writes an audit row. `mode: sync` means the whole
+rotation works the slot together, so nobody has to accept; `mode: async` is one owner
+per slot with a real handoff.
+
+**provenance** every agent has one permanent `agent_key` (alphanumeric, generated once,
+refused on update) plus a `scope` (permissions, channels, instructions, rules, data
+scope). every action it takes appends a row to its own hash chain, and `verify` recomputes
+the chain, so an edited history is detectable instead of deniable.
+
+**authoring** a workflow can be written by one or more agents (`POST
+/crews/{id}/workflows/propose`). it lands as `proposed` and is inert: `run` refuses it
+until a human calls `approve`. after that, `publish` binds a cron and the beat runs it.
+agents get authorship, humans keep the switch.
+
 **workflow** a dag of seven node types, validated on save (no cycles, no dangling
 deps), executed with a `human_gate` that pauses the run until decided. two of the
 seven hand a step to a tool you already run: `n8n` posts to a webhook on your n8n,
@@ -139,6 +162,12 @@ workers never take the same job.
 | `POST /agents/{id}/escalate` | a member pushing a decision up the line |
 | `GET /agents/{id}/pov` `GET .../board` `GET/POST .../calendar` `GET /crews/{id}/roster` | point of view |
 | `POST /crews/{id}/triggers` `GET .../triggers` `POST /triggers/{id}/enable` | event rules |
+| `POST /crews/{id}/shift-plans` `GET /crews/{id}/coverage` `GET /shift-plans/{id}/schedule` | who is on duty, and when |
+| `POST /shift-plans/{id}/roll` `POST /handoffs/{id}/accept` `GET /agents/{id}/briefing` | shift changes |
+| `POST /crews/{id}/workflows/propose` `POST /workflows/{id}/approve` `POST /workflows/{id}/publish` | agents write, humans approve |
+| `GET /agents/{id}/provenance` `GET /agents/{id}/audit/verify` `GET /crews/{id}/audit` | the provenance chain |
+| `GET /crews/{id}/a2a/transcript` `GET /a2a/threads/{id}` | a2a as sentences, with envelopes |
+| `GET /ui/pov` | the served point-of-view switcher |
 | `GET /health` `GET /providers` `GET /services` | ops, and which self-hosted tools are wired |
 
 `/docs` is the live openapi ui.
@@ -198,13 +227,15 @@ that vm had no nested virtualization, so celesto's microVMs cannot boot there. t
 persistent-computer path needs a host with `/dev/kvm`; the build check says so
 instead of pretending.
 
-260 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+292 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
 workflow validation and gates, the n8n and dify importers, the n8n and dify
 self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, channel
 boards, department routing and escalation, the pov projection, the trigger engine and
-the celery beat, and the http surface including auth.
+the celery beat, shift rotation and handoffs, the hash-chained audit trail, the a2a
+human rendering, agent-authored workflows with their approval gate, and the http
+surface including auth.
 
 ## honest limits
 

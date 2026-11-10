@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 create table if not exists meta (
@@ -254,6 +254,77 @@ create table if not exists agent_events (
 );
 create index if not exists agent_events_agent on agent_events (agent_id, starts_at);
 
+-- appending audit: one hash-chained row per agent action. provenance is not a
+-- report you generate later, it is the row you write at the moment of the action.
+create table if not exists agent_audit (
+    id text primary key,
+    team_id text not null,
+    agent_id text not null,
+    seq integer not null,
+    action text not null,
+    actor_kind text not null default 'agent',
+    actor_id text not null default '',
+    target_kind text not null default '',
+    target_id text not null default '',
+    payload text not null default '{}',
+    prev_hash text not null default '',
+    hash text not null,
+    created_date real not null
+);
+create index if not exists agent_audit_agent on agent_audit (agent_id, seq);
+
+-- shifts: a rotation is arithmetic, not a cron job. slot_index = (now - anchor) //
+-- slot, and who is on duty is rotation[slot_index % len(rotation)]. nothing drifts
+-- because nothing is stored except the plan.
+create table if not exists shift_plans (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    channel_id text references channels(id) on delete set null,
+    name text not null,
+    slot_minutes integer not null default 240,
+    anchor_at real not null,
+    rotation text not null default '[]',
+    mode text not null default 'async',
+    timezone text not null default 'UTC',
+    enabled integer not null default 1,
+    created_date real not null,
+    updated_date real not null,
+    unique (team_id, name)
+);
+
+-- a handoff is a shift change with a body: what the outgoing agent knew, which
+-- cards are mid-flight, what is blocked, and what the next one should do first.
+create table if not exists handoffs (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    plan_id text references shift_plans(id) on delete cascade,
+    channel_id text references channels(id) on delete set null,
+    slot_index integer not null default 0,
+    from_agent_id text references agents(id) on delete set null,
+    to_agent_id text not null references agents(id) on delete cascade,
+    task_ids text not null default '[]',
+    bundle text not null default '{}',
+    status text not null default 'open',
+    note text not null default '',
+    created_date real not null,
+    accepted_date real,
+    expires_at real
+);
+create index if not exists handoffs_team on handoffs (team_id, status, created_date);
+create unique index if not exists handoffs_slot on handoffs (plan_id, slot_index);
+
+-- workflows can be authored by agents together; approval is a separate verdict so
+-- "an agent wrote it" never quietly becomes "it runs every night".
+create table if not exists workflow_coauthors (
+    workflow_id text not null references workflows(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    role text not null default 'author',
+    verdict text not null default 'pending',
+    note text not null default '',
+    created_date real not null,
+    primary key (workflow_id, agent_id)
+);
+
 create table if not exists job_queue (
     id text primary key,
     kind text not null,
@@ -303,13 +374,28 @@ class Store:
     def _add_columns(self, c: sqlite3.Connection) -> None:
         """v2 columns on v1 tables. sqlite has no `add column if not exists`, so
         check the pragma; this stays idempotent for a db created fresh from SCHEMA."""
-        wanted = {"tasks": {"channel_id": "text references channels(id) on delete set null"}}
+        wanted = {
+            "tasks": {"channel_id": "text references channels(id) on delete set null"},
+            # immutable public handle: alphanumeric, generated once, never updated
+            "agents": {
+                "agent_key": "text",
+                "scope": "text not null default '{}'",
+            },
+            # a workflow is inert until its status says otherwise
+            "workflows": {
+                "status": "text not null default 'active'",
+                "proposed_by_agent_id": "text",
+                "approved_by": "text not null default ''",
+                "approved_date": "real",
+            },
+        }
         for table, columns in wanted.items():
             existing = {row["name"] for row in c.execute(f"pragma table_info({table})")}
             for name, decl in columns.items():
                 if name not in existing:
                     c.execute(f"alter table {table} add column {name} {decl}")
         c.execute("create index if not exists tasks_channel on tasks (channel_id, column_name)")
+        c.execute("create unique index if not exists agents_key on agents (agent_key)")
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:

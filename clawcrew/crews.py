@@ -28,6 +28,38 @@ def slugify(value: str) -> str:
     return slug[:60]
 
 
+DEFAULT_SCOPE = {
+    # what the agent may do. defaults are the safe half: work, talk, but no approvals
+    # and no spending.
+    "permissions": {
+        "dispatch_tasks": True,
+        "send_a2a": True,
+        "approve_workflows": False,
+        "create_channels": False,
+        "use_computer": True,
+        "spend": False,
+    },
+    "channels": [],   # empty means every channel in the crew
+    "instructions": "",
+    "rules": [],      # short standing constraints, shown to the model verbatim
+    "data_scope": "crew",
+}
+
+KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/0/1: readable in a log
+
+
+def new_agent_key(store: Store, attempts: int = 8) -> str:
+    """alphanumeric, hyphenless, stable. it is the id a human types into a config
+    file, so it must survive copy-paste: no vowels confusion, no punctuation."""
+    import secrets
+
+    for _ in range(attempts):
+        key = "AC" + "".join(secrets.choice(KEY_ALPHABET) for _ in range(10))
+        if not store.one("select 1 from agents where agent_key = ?", (key,)):
+            return key
+    raise Conflict("could not allocate a unique agent key")
+
+
 class CrewService:
     def __init__(self, store: Store, registry: ProviderRegistry | None = None):
         self.store = store
@@ -118,9 +150,16 @@ class CrewService:
         skills: list[str] | None = None,
         tools: list[str] | None = None,
         runtime: dict | None = None,
+        scope: dict | None = None,
     ) -> dict:
         self.get_team(team_id)
         agent_id = new_id("agent")
+        agent_key = new_agent_key(self.store)
+        agent_scope = {
+            **DEFAULT_SCOPE,
+            "permissions": {**DEFAULT_SCOPE["permissions"], **((scope or {}).get("permissions") or {})},
+            **{k: v for k, v in (scope or {}).items() if k != "permissions"},
+        }
         ts = now()
         rt = {
             "computer": "persistent",  # persistent | ephemeral | none
@@ -134,11 +173,12 @@ class CrewService:
                 c.execute(
                     """insert into agents
                        (id, team_id, name, role, model, system_prompt, skills, tools, runtime, status,
-                        created_date, updated_date)
-                       values (?,?,?,?,?,?,?,?,?,'idle',?,?)""",
+                        agent_key, scope, created_date, updated_date)
+                       values (?,?,?,?,?,?,?,?,?,'idle',?,?,?,?)""",
                     (
                         agent_id, team_id, name, role, model, system_prompt,
-                        dumps(skills or []), dumps(tools or []), dumps(rt), ts, ts,
+                        dumps(skills or []), dumps(tools or []), dumps(rt),
+                        agent_key, dumps(agent_scope), ts, ts,
                     ),
                 )
             except Exception as exc:
@@ -159,14 +199,36 @@ class CrewService:
             )
         ]
 
+    def by_key(self, agent_key: str) -> dict:
+        row = self.store.one("select * from agents where agent_key = ?", (agent_key,))
+        if not row:
+            raise NotFound(f"agent key {agent_key} not found")
+        return self._agent(row)
+
     def update_agent(self, agent_id: str, **fields) -> dict:
-        allowed = {"name", "role", "model", "system_prompt", "skills", "tools", "runtime", "status"}
+        if "agent_key" in fields and fields["agent_key"] is not None:
+            current = self.get_agent(agent_id)
+            if fields["agent_key"] != current["agent_key"]:
+                raise ValidationError("agent_key is permanent; it is the agent's identity")
+        allowed = {"name", "role", "model", "system_prompt", "skills", "tools", "runtime",
+                   "status", "scope"}
         patch = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not patch:
             return self.get_agent(agent_id)
         if "status" in patch and patch["status"] not in AGENT_STATUS:
             raise ValidationError(f"status must be one of {sorted(AGENT_STATUS)}")
-        for key in ("skills", "tools", "runtime"):
+        if "scope" in patch:
+            agent = self.get_agent(agent_id)
+            incoming = patch["scope"] or {}
+            patch["scope"] = {
+                **agent["scope"],
+                **incoming,
+                "permissions": {
+                    **(agent["scope"].get("permissions") or {}),
+                    **(incoming.get("permissions") or {}),
+                },
+            }
+        for key in ("skills", "tools", "runtime", "scope"):
             if key in patch:
                 if not isinstance(patch[key], (list, dict)):
                     raise ValidationError(f"{key} must be a list or object")
@@ -191,6 +253,8 @@ class CrewService:
             "tools": loads(row["tools"], []),
             "runtime": loads(row["runtime"], {}),
             "status": row["status"],
+            "agent_key": row["agent_key"] if "agent_key" in row.keys() else "",
+            "scope": loads(row["scope"], {}) if "scope" in row.keys() else {},
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

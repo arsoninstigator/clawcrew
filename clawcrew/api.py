@@ -14,6 +14,9 @@ groups:
   /departments  the org chart, coordinator routing, escalation
   /pov          the workspace as one agent sees it (board, calendar, inbox)
   /triggers     event -> queued action rules
+  /shift-plans  coverage rotations, and the handoffs between them
+  /audit        the per-agent hash-chained provenance trail
+  /ui/pov       the served point-of-view switcher
   /ops          health, providers, queue tick, worker drain, counts
 """
 
@@ -22,12 +25,14 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Body, FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from . import a2a_human
 from . import a2a_protocol as a2a_spec
 from .app import App, build_app
 from .errors import ClawCrewError, NotFound, ValidationError
 from .importers import SOURCES, import_workflow
+from .web import POV_PAGE
 
 
 def create_api(app: App | None = None) -> FastAPI:
@@ -323,6 +328,162 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.delete("/triggers/{trigger_id}")
     def delete_trigger(trigger_id: str) -> dict:
         return app.triggers.delete(trigger_id)
+
+    # ---- shifts: coverage and handoffs --------------------------------
+    @api.post("/crews/{team_id}/shift-plans")
+    def create_shift_plan(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.shifts.create_plan(
+            team_id=team_id,
+            name=data.get("name", ""),
+            rotation=data.get("rotation") or [],
+            slot_minutes=int(data.get("slot_minutes", 240)),
+            anchor_at=data.get("anchor_at"),
+            mode=data.get("mode", "async"),
+            channel_id=data.get("channel_id"),
+            timezone=data.get("timezone", "UTC"),
+            enabled=bool(data.get("enabled", True)),
+        )
+
+    @api.get("/crews/{team_id}/shift-plans")
+    def list_shift_plans(team_id: str) -> dict:
+        return {"plans": app.shifts.list_plans(team_id)}
+
+    @api.get("/crews/{team_id}/coverage")
+    def coverage(team_id: str) -> dict:
+        return app.shifts.coverage(team_id)
+
+    @api.patch("/shift-plans/{plan_id}")
+    def update_shift_plan(plan_id: str, payload: dict = Body(...)) -> dict:
+        return app.shifts.update_plan(plan_id, **body(payload))
+
+    @api.delete("/shift-plans/{plan_id}")
+    def delete_shift_plan(plan_id: str) -> dict:
+        return app.shifts.delete_plan(plan_id)
+
+    @api.get("/shift-plans/{plan_id}/coverage")
+    def plan_coverage(plan_id: str) -> dict:
+        return app.shifts.on_duty(plan_id)
+
+    @api.get("/shift-plans/{plan_id}/schedule")
+    def plan_schedule(plan_id: str, slots: int = Query(8, ge=1, le=96)) -> dict:
+        return {"plan_id": plan_id, "slots": app.shifts.schedule(plan_id, slots=slots)}
+
+    @api.post("/shift-plans/{plan_id}/roll")
+    def roll_shift(plan_id: str) -> dict:
+        return app.shifts.roll(plan_id)
+
+    @api.get("/crews/{team_id}/handoffs")
+    def list_handoffs(team_id: str, status: str | None = None,
+                      limit: int = Query(50, ge=1, le=200)) -> dict:
+        return {"handoffs": app.shifts.handoffs(team_id, status=status, limit=limit)}
+
+    @api.get("/handoffs/{handoff_id}")
+    def get_handoff(handoff_id: str) -> dict:
+        return app.shifts.get_handoff(handoff_id)
+
+    @api.post("/handoffs/{handoff_id}/accept")
+    def accept_handoff(handoff_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.shifts.accept(handoff_id, agent_id=data.get("agent_id"), note=data.get("note", ""))
+
+    @api.post("/handoffs/{handoff_id}/decline")
+    def decline_handoff(handoff_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.shifts.decline(handoff_id, note=data.get("note", ""))
+
+    @api.get("/agents/{agent_id}/briefing")
+    def agent_briefing(agent_id: str) -> dict:
+        return app.shifts.briefing(agent_id)
+
+    # ---- provenance: the audit chain ----------------------------------
+    @api.get("/agents/{agent_id}/audit")
+    def agent_audit(agent_id: str, limit: int = Query(100, ge=1, le=500),
+                    action: str | None = None) -> dict:
+        return {"entries": app.audit.history(agent_id, limit=limit, action=action)}
+
+    @api.get("/agents/{agent_id}/audit/verify")
+    def verify_agent_audit(agent_id: str) -> dict:
+        return app.audit.verify(agent_id)
+
+    @api.get("/agents/{agent_id}/provenance")
+    def agent_provenance(agent_id: str) -> dict:
+        summary = app.audit.summary(agent_id)
+        summary["agent"] = {
+            k: app.crews.get_agent(agent_id)[k]
+            for k in ("id", "name", "role", "agent_key", "scope", "skills", "tools")
+        }
+        return summary
+
+    @api.get("/crews/{team_id}/audit")
+    def crew_audit(team_id: str, limit: int = Query(200, ge=1, le=500)) -> dict:
+        return {"entries": app.audit.crew_history(team_id, limit=limit)}
+
+    @api.get("/agents/by-key/{agent_key}")
+    def agent_by_key(agent_key: str) -> dict:
+        return app.crews.by_key(agent_key)
+
+    # ---- a2a read two ways --------------------------------------------
+    @api.get("/crews/{team_id}/a2a/transcript")
+    def a2a_transcript(team_id: str, limit: int = Query(100, ge=1, le=500),
+                       include_pending: bool = True) -> dict:
+        return a2a_human.transcript(
+            app.a2a, app.crews, team_id, kanban=app.kanban, limit=limit,
+            include_pending=include_pending,
+        )
+
+    @api.get("/a2a/threads/{thread_id}")
+    def a2a_thread(thread_id: str) -> dict:
+        return a2a_human.thread_view(app.a2a, app.crews, thread_id, kanban=app.kanban)
+
+    # ---- workflows authored by agents ---------------------------------
+    @api.post("/crews/{team_id}/workflows/propose")
+    def propose_workflow(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.workflows.propose(
+            team_id=team_id,
+            name=data.get("name", ""),
+            definition=data.get("definition") or {},
+            agent_ids=data.get("agent_ids") or [],
+            note=data.get("note", ""),
+        )
+
+    @api.post("/workflows/{workflow_id}/review")
+    def review_workflow(workflow_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.workflows.review(
+            workflow_id, data.get("agent_id", ""), data.get("verdict", ""),
+            note=data.get("note", ""),
+        )
+
+    @api.post("/workflows/{workflow_id}/approve")
+    def approve_workflow(workflow_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.workflows.approve(
+            workflow_id, actor=data.get("actor", "owner"), note=data.get("note", "")
+        )
+
+    @api.post("/workflows/{workflow_id}/reject")
+    def reject_workflow(workflow_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.workflows.reject(
+            workflow_id, actor=data.get("actor", "owner"), note=data.get("note", "")
+        )
+
+    @api.post("/workflows/{workflow_id}/publish")
+    def publish_workflow(workflow_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.workflows.publish(
+            workflow_id,
+            spec=data.get("spec", ""),
+            kind=data.get("kind", "cron"),
+            schedule_name=data.get("schedule_name"),
+        )
+
+    # ---- the served pov switcher --------------------------------------
+    @api.get("/ui/pov", response_class=HTMLResponse)
+    def pov_page() -> str:
+        return POV_PAGE
 
     # ---- kanban -------------------------------------------------------
     @api.post("/crews/{team_id}/tasks")

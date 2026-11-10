@@ -68,7 +68,9 @@ class A2AService:
                     status, thread, now(), None if requires_review else now(),
                 ),
             )
-        return self.get(message_id)
+        message = self.get(message_id)
+        self._emit(team_id, message_id, message=message)
+        return message
 
     def _emit(self, team_id: str, message_id: str, **extra) -> None:
         if self.events_hook:
@@ -89,7 +91,14 @@ class A2AService:
                        reviewed_date = ? where id = ?""",
                 (decision, reviewer, note, now(), message_id),
             )
-        return self.get(message_id)
+        message = self.get(message_id)
+        if self.events_hook:
+            self.events_hook(
+                "a2a.reviewed",
+                {"team_id": message["team_id"], "message": message, "decision": decision,
+                 "reviewer": reviewer},
+            )
+        return message
 
     def review_queue(self, team_id: str, limit: int = 100) -> list[dict]:
         return [
