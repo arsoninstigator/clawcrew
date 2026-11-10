@@ -22,7 +22,8 @@ the commit it came from.
 | project | licence | what clawcrew took | how |
 | --- | --- | --- | --- |
 | [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) | Apache-2.0 | the per-project status model: a status is `{name, color, sort_order, hidden}` rather than a fixed enum, and `backlog`/`cancelled` are hidden by default | `KanbanService.column_meta` accepts string or object columns and keeps hidden columns out of the default board view. |
-| [block/buzz](https://github.com/block/buzz) | Apache-2.0 | the idea that agent conversation is its own channel with its own lifecycle, not task comments | `a2a_messages` is a first class table with a status lifecycle. |
+| [block/buzz](https://github.com/block/buzz) | Apache-2.0 | the idea that agent conversation is its own channel with its own lifecycle, not task comments; and, since comms, the bet that one signed event log holds people, agents and workflows alike | `a2a_messages` is a first class table with a status lifecycle. `clawcrew/comms` speaks their protocol (nip-01 events, nip-29 rooms) rather than their code, so a room can be mirrored to their relay. |
+| [Mininglamp-OSS/octo-server](https://github.com/Mininglamp-OSS/octo-server) | Apache-2.0 | the shape of a workplace where agents are members with a session and per-room membership, and the lesson that an external im bridge is its own service | `comms_members` is per room with a member kind; `transports.py` keeps bridging out of the core. no code copied, and no client written against their long-poll bot api. |
 | [a2aproject/A2A](https://github.com/a2aproject/A2A) | Apache-2.0 | the JSON-RPC binding, the `message/send` / `tasks/get` surface, the review-gate extension idea | `a2a_protocol.py` implements the binding over the vendored models. |
 
 ## format interop only (licence does not permit code reuse)
@@ -43,6 +44,17 @@ interoperability, which is what users of an open tool actually need.
 | --- | --- | --- |
 | [langflow-ai/langflow](https://github.com/langflow-ai/langflow) | MIT | a dag editor in python. nothing here is a canvas yet; when the canvas is built, this is the first place to port from, and MIT allows it. |
 | `orchestrator.inc`, `ando.so`, `zop.dev`, `celery.dev` | unknown | could not resolve a public repository or licence for these names, so nothing was taken and no claim is made about them. celery itself is BSD-3-Clause and is used as an optional broker, not vendored. |
+
+## specifications implemented from their text
+
+not code reuse, but the reason the wire is interoperable, so it is recorded here:
+
+| spec | what clawcrew implements | where |
+| --- | --- | --- |
+| [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) | the event envelope: canonical serialization, `id` as sha256 of it, filters (`ids`, `authors`, `kinds`, `since`, `until`, `#tag`) | `clawcrew/comms/events.py` |
+| [NIP-29](https://github.com/nostr-protocol/nips/blob/master/29.md) | relay-based groups: kind 9 with an `h` tag, 9000/9001 roster changes, 39000 group metadata (reserved) | `clawcrew/comms/events.py` |
+| [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) | schnorr signatures over secp256k1, so a signature is one any relay accepts | `clawcrew/comms/secp256k1.py` |
+| [BIP-173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki) | bech32, for the `npub1...` and `nsec1...` spellings | `clawcrew/comms/bech32.py` |
 
 ## obligations we carry
 

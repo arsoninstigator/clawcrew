@@ -38,6 +38,62 @@ sdk may appear as an *option* (celesto cloud, e2b cloud), never as the only path
   is already gone when the task ends. persistent computers are for the agent, disposable
   sandboxes are for the risky step.
 
+### buzz, and the nostr room protocol
+
+- repo: `block/buzz`, apache-2.0 (this repository is buzz 0.x; `block/buzz-app` is 1.0).
+- what it is: a self-hostable workspace where humans and agents share rooms, built as a
+  nostr relay. every message, reaction, workflow step, review approval and git event is a
+  signed event in one log, and an agent is a member with its own key rather than a bot with
+  a permission flag.
+- how we use it: **the protocol, not the client.** `clawcrew/comms/` speaks nip-01 (event
+  ids, tags, bip340 signatures) and nip-29 (rooms as groups, kind 9 messages with an `h`
+  tag, 9000/9001 for roster changes). pointing a room at a buzz relay is
+  `clawcrew comms bridge <room> buzz --relay wss://...`, which is the whole integration,
+  because their relay already speaks the format we write.
+- what we do not adopt: their scope. buzz is shaped around software teams (patches, ci,
+  review, merges in the room). a support shift or a research room is the same substrate and
+  not the same product, and copying their event taxonomy would have imported the first into
+  the second.
+- not vendored: it is rust, it is large, and there is nothing in it that the protocol does
+  not already give us.
+
+### octo, the closest reference for a full workplace
+
+- repos: `Mininglamp-OSS/octo-server` (go backend, apache-2.0), `octo-web`, `octo-lib`,
+  `octo-channel-gateway`, `octo-cli`, `octo-adapters`, plus per-platform clients.
+- what it is: a self hosted workplace where agents are first class conversation
+  participants, with rest and websocket apis, an agent runtime ("lobster"), and a real im
+  core underneath. the closest thing to the shape clawcrew's channels are aiming at, and
+  apache-2.0 like us.
+- what we took: the lesson, not the code: an agent is a member with a session and an
+  identity, membership is per room, and the gateway that bridges external im products into
+  the workplace is a separate service rather than something the core does inline.
+- what is not wired: an adapter. their bot surface is long-poll based (`docs/bot-events-
+  longpoll.md` upstream), which is a real piece of work rather than a mapping, so
+  `Transports` ships the two-call http contract instead and this is how octo would plug in.
+  shipping a guessed client against a long-poll api would have been the fake version.
+- note: their client and server are go and typescript; nothing here could be ported into a
+  python backend without being rewritten.
+
+## the products this is aimed at
+
+these are references for the shape of the product, not code sources. none of them is
+open source in a way that lets us copy anything, and nothing below was copied.
+
+- **ando** (`ando.so`): agents as true participants, context that compounds inside the
+  room, human attention as the scarce resource. the third one is why presence is ephemeral
+  in clawcrew rather than a stored table.
+- **kylon** (`kylon.io`): a room that produces artifacts (trackers, boards) rather than only
+  messages, and external agents (claude code, codex) joining as members.
+- **paperclip** (`paperclip.ing`): the org chart as the interface, agents hired into roles
+  with budgets and goals. that is the layer above comms, and it is what
+  `orgchart/` and `departments.py` are for.
+- **cua spaces** (`cua.ai`) and **vorflux**: an always-on computer per agent that a human
+  watches and can take over. in clawcrew that is `get persistent`, and a room is where you
+  see what the agent did with it.
+- **symphony** and other agent-team products: the team is the unit of work, not the single
+  run. that is the whole premise, and none of their code is public.
+
 ## what we only talk to
 
 n8n and dify are source available, not mit or apache. so we never copy their code. we

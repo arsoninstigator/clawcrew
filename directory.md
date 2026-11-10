@@ -18,6 +18,15 @@ clawcrew/
 ├── a2a_protocol.py            the published json-rpc shape, validated on the way out
 ├── a2a_human.py               a transcript rendered as sentences
 ├── channels.py                rooms: membership, its own board, conversation
+│
+├── comms/                     rooms as a signed log, agents as their members
+│   ├── events.py              the nip-01 envelope, kinds, filters, canonical ids
+│   ├── identity.py            one keypair per agent, minted once
+│   ├── secp256k1.py           bip340 schnorr, in tree, so a signature is a real one
+│   ├── bech32.py              npub / nsec spellings
+│   ├── service.py             the append-only log, roster, cursors, bridges, sync
+│   ├── transports.py          http contract, nostr relay frames, and their refusals
+│   └── gateway.py             channel conversation <-> signed log, without a loop
 ├── departments.py             coordinators, nesting, routing, escalation
 ├── pov.py                     one agent's workspace, as a projection
 ├── profile.py                 per-agent namespaces, fingerprints, isolation report

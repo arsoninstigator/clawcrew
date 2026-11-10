@@ -19,6 +19,7 @@ from .manage.knowledge.service import ConnectorService
 from .work.overnight.service import BriefService
 from .audit import AuditService
 from .channels import ChannelService
+from .comms import CommsGateway, CommsService
 from .config import Settings
 from .crews import CrewService
 from .departments import DepartmentService
@@ -61,6 +62,8 @@ class App:
     vault: CredentialBroker
     asks: AskService
     coordination: SqliteCoordination
+    comms: CommsService
+    comms_gateway: CommsGateway
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
@@ -112,6 +115,8 @@ class App:
             "connectors": n("connectors"),
             "knowledge_docs": n("knowledge_docs"),
             "vault_grants": n("agent_vault"),
+            "comms_events": n("comms_events"),
+            "comms_members": n("comms_members"),
         }
 
 
@@ -187,6 +192,11 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     workflows.events_hook = emit
     shifts.events_hook = emit
     profile.events_hook = emit
+
+    # comms goes last on purpose: it wraps the channel hook that is already set,
+    # so a room message is signed after the audit chain has seen it
+    comms = CommsService(store, settings=settings, channels=channels)
+    comms_gateway = CommsGateway(comms, channels).install()
     return App(
         settings=settings,
         store=store,
@@ -212,4 +222,6 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         asks=asks,
         coordination=coordination,
         vault=vault,
+        comms=comms,
+        comms_gateway=comms_gateway,
     )

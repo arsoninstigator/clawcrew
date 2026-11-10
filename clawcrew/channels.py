@@ -68,7 +68,11 @@ class ChannelService:
             self.join(channel_id, agent_id, role="lead" if agent_id == lead else "member")
         if lead and (not members or lead not in members):
             self.join(channel_id, lead, role="lead")
-        return self.get(channel_id)
+        channel = self.get(channel_id)
+        if self.events_hook:
+            # a new room is news: a configured relay wants it, before anyone speaks
+            self.events_hook("channel.created", {"channel": channel, "team_id": team_id})
+        return channel
 
     def get(self, channel_id: str) -> dict:
         row = self.store.one("select * from channels where id = ?", (channel_id,))
@@ -165,6 +169,7 @@ class ChannelService:
         author_id: str = "",
         author_kind: str = "agent",
         task_id: str | None = None,
+        via: str = "app",
     ) -> dict:
         """a message in the room. `author_kind` is agent | human | system, because a
         board that cannot tell the owner from an agent is not auditable."""
@@ -177,9 +182,9 @@ class ChannelService:
         ts = now()
         with self.store.tx() as c:
             c.execute(
-                """insert into channel_messages (id, channel_id, task_id, author_kind, author_id, body, created_date)
-                   values (?,?,?,?,?,?,?)""",
-                (message_id, channel_id, task_id, author_kind, author_id, body, ts),
+                """insert into channel_messages (id, channel_id, task_id, author_kind, author_id, body, created_date, via)
+                   values (?,?,?,?,?,?,?,?)""",
+                (message_id, channel_id, task_id, author_kind, author_id, body, ts, via),
             )
         message = self.get_message(message_id)
         if self.events_hook:
@@ -200,6 +205,7 @@ class ChannelService:
             "author_kind": row["author_kind"],
             "author_id": row["author_id"],
             "body": row["body"],
+            "via": row["via"] if "via" in row.keys() else "app",
             "created_date": row["created_date"],
         }
 

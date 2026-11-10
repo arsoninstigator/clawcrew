@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 create table if not exists meta (
@@ -469,6 +469,63 @@ create table if not exists agent_vault (
     unique (agent_id, label)
 );
 create index if not exists agent_vault_agent on agent_vault (agent_id, status);
+
+-- comms: the signed room log. `comms_events` is the authority; the channel
+-- conversation is a view of it, which is why a message carries the event id.
+create table if not exists comms_identities (
+    agent_id text primary key references agents(id) on delete cascade,
+    team_id text not null references teams(id) on delete cascade,
+    handle text not null default '',
+    pubkey text not null unique,
+    seckey text not null default '',
+    custody text not null default 'local',
+    relays text not null default '[]',
+    created_date real not null
+);
+
+create table if not exists comms_members (
+    room_id text not null references channels(id) on delete cascade,
+    member_id text not null,
+    member_kind text not null default 'agent',
+    pubkey text not null default '',
+    role text not null default 'member',
+    joined_date real not null,
+    primary key (room_id, member_id)
+);
+
+create table if not exists comms_events (
+    seq integer primary key autoincrement,
+    id text not null unique,
+    room_id text not null,
+    kind integer not null,
+    pubkey text not null,
+    author_id text not null default '',
+    author_kind text not null default 'external',
+    content text not null default '',
+    tags text not null default '[]',
+    created_at integer not null,
+    sig text not null default '',
+    received_at real not null
+);
+create index if not exists comms_events_room on comms_events (room_id, seq);
+create index if not exists comms_events_created on comms_events (room_id, created_at);
+
+create table if not exists comms_cursors (
+    name text primary key,
+    room_id text not null default '',
+    seq integer not null default 0,
+    updated_date real not null
+);
+
+create table if not exists comms_bridges (
+    room_id text not null references channels(id) on delete cascade,
+    transport text not null,
+    config text not null default '{}',
+    cursor_seq integer not null default 0,
+    last_sync real,
+    last_error text not null default '',
+    primary key (room_id, transport)
+);
 """
 
 
@@ -511,6 +568,8 @@ class Store:
         check the pragma; this stays idempotent for a db created fresh from SCHEMA."""
         wanted = {
             "tasks": {"channel_id": "text references channels(id) on delete set null"},
+            # which side wrote the row: the app, or the signed log behind it
+            "channel_messages": {"via": "text not null default 'app'"},
             # immutable public handle: alphanumeric, generated once, never updated
             "agents": {
                 "agent_key": "text",

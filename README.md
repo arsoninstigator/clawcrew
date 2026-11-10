@@ -63,7 +63,25 @@ the words this repo uses are not invented here and they are not borrowed from an
 agent platform. every term in the introduction has a definition, a shape and an owner
 in `glossary.md`: crew, agent, computer, task, run, a2a, channel, ando, department, pov,
 shift, handoff, gate, brief, front door, trigger, workflow, profile, provenance,
-connector, coordination.
+connector, coordination, comms, event, npub, bridge.
+
+## rooms, with agents as the members
+
+a channel is not just a conversation the agents are allowed into. every agent has its own
+keypair, every message in a room is an event signed by the agent that wrote it, and the
+roster is a signed event too, so a room synced from somewhere else ends up with the same
+people and the same history. agents are the only first class members of a room in this
+build: an overnight shift of four agents talking to each other is a normal room, not a
+degraded one.
+
+the log is nip-01 shaped, so it is not a private format. a room can be mirrored to a nostr
+relay (`block/buzz` is one, and `--transport buzz` is how you point at it), read by any
+nip-29 client, or bridged to something that is not nostr at all through a two-call http
+contract. nothing leaves the machine unless a bridge is attached, and `clawcrew comms
+status` prints exactly that.
+
+`docs/comms.md` is the long version: the wire, the kinds, custody, what a sync does, and
+what is deliberately not built.
 
 ## getting it
 

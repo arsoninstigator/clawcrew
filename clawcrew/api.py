@@ -31,6 +31,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from . import a2a_human
 from . import a2a_protocol as a2a_spec
 from .app import App, build_app
+from .comms import Event
 from .errors import ClawCrewError, NotFound, ValidationError
 from .importers import SOURCES, import_workflow
 from .manage.knowledge.service import ADAPTERS
@@ -227,6 +228,96 @@ def create_api(app: App | None = None) -> FastAPI:
         data = body(payload)
         title = data.pop("title", "")
         return app.channels.create_task(channel_id, title, **data)
+
+
+    # ---- comms: rooms whose members are agents, over a signed log ------
+    @api.get("/comms/rooms/{channel_id}")
+    def comms_room(channel_id: str) -> dict:
+        return {
+            "room": app.channels.get(channel_id),
+            "stats": app.comms.stats(channel_id),
+            "members": app.comms.members(channel_id),
+            "bridges": app.comms.bridges(channel_id),
+        }
+
+    @api.get("/comms/rooms/{channel_id}/events")
+    def comms_events(
+        channel_id: str,
+        since_seq: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=200),
+        wire: bool = False,
+    ) -> dict:
+        """`wire=true` is the raw nip-01 shape, for a client that verifies the
+        signature instead of trusting this process."""
+        if wire:
+            return {"events": app.comms.read_json(channel_id, since_seq=since_seq, limit=limit)}
+        return {"events": app.comms.read(channel_id, since_seq=since_seq, limit=limit)}
+
+    @api.post("/comms/rooms/{channel_id}/messages")
+    def comms_say(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.comms.say(
+            channel_id,
+            data.get("body", ""),
+            author_id=data.get("author_id") or data.get("agent_id"),
+            task_id=data.get("task_id"),
+        )
+
+    @api.post("/comms/rooms/{channel_id}/members")
+    def comms_join(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        member_id = data.get("member_id") or data.get("agent_id")
+        if not member_id:
+            raise ValidationError("member_id is required")
+        return app.comms.add_member(
+            channel_id, member_id, kind=data.get("kind", "agent"),
+            role=data.get("role", "member"),
+        )
+
+    @api.delete("/comms/rooms/{channel_id}/members/{member_id}")
+    def comms_leave(channel_id: str, member_id: str, by: str | None = None) -> dict:
+        return app.comms.remove_member(channel_id, member_id, by=by)
+
+    @api.post("/comms/rooms/{channel_id}/bridges")
+    def comms_bridge(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.comms.register_bridge(
+            channel_id, data.get("transport", ""), data.get("config") or {}
+        )
+
+    @api.post("/comms/rooms/{channel_id}/sync")
+    def comms_sync(channel_id: str, payload: dict | None = Body(default=None)) -> dict:
+        data = body(payload) if payload else {}
+        return app.comms.sync(channel_id, data.get("transport"))
+
+    @api.post("/comms/rooms/{channel_id}/subscriptions")
+    def comms_subscribe(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.comms.subscribe(
+            data.get("name", ""), channel_id, from_start=bool(data.get("from_start"))
+        )
+
+    @api.get("/comms/subscriptions/{name}")
+    def comms_poll(name: str, limit: int = Query(50, ge=1, le=200), advance: bool = True) -> dict:
+        return app.comms.poll(name, limit=limit, advance=advance)
+
+    @api.get("/comms/agents/{agent_id}/identity")
+    def comms_identity(agent_id: str) -> dict:
+        return app.comms.identity(agent_id)
+
+    @api.post("/comms/agents/{agent_id}/heartbeat")
+    def comms_heartbeat(agent_id: str) -> dict:
+        return app.comms.heartbeat(agent_id)
+
+    @api.get("/comms/events/{event_id}/verify")
+    def comms_verify(event_id: str) -> dict:
+        return app.comms.verify(event_id)
+
+    @api.post("/comms/ingest")
+    def comms_ingest(payload: dict = Body(...)) -> dict:
+        """the inbound half of a bridge: a signed event, verified before it is
+        stored, so a bridge cannot forge an author."""
+        return app.comms.ingest(Event.from_dict(body(payload)))
 
     # ---- departments: the org chart -----------------------------------
     @api.post("/crews/{team_id}/departments")

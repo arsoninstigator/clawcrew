@@ -75,6 +75,17 @@ class Settings:
     vault_proxy_url: str = ""
     vault_ttl_hours: float = 24.0
 
+    # comms: rooms whose members are agents, over a signed event log. custody
+    # "local" means this node mints and holds each agent's key; "external" means
+    # only public halves are stored and signing happens elsewhere (not built).
+    comms_custody: str = "local"
+    # this build makes agents the only first class members of a room; people can
+    # be enabled, and nothing else about the log changes when they are
+    comms_humans_enabled: bool = False
+    comms_relay: str = ""
+    comms_relay_transport: str = "nostr"
+    comms_message_limit: int = 200
+
     # approvals without a login: the link is the credential, so it needs a host to
     # be sent from and a secret to be signed with (generated per db if unset)
     gate_secret: str = ""
@@ -124,6 +135,11 @@ class Settings:
             vault_base_url=_env(env, "AGENT_VAULT_URL"),
             vault_proxy_url=_env(env, "AGENT_VAULT_PROXY_URL"),
             vault_ttl_hours=float(_env(env, "AGENT_VAULT_TTL_HOURS", "24") or 24),
+            comms_custody=_env(env, "CLAWCREW_COMMS_CUSTODY", "local").lower(),
+            comms_humans_enabled=_flag(env, "CLAWCREW_COMMS_HUMANS", False),
+            comms_relay=_env(env, "CLAWCREW_COMMS_RELAY"),
+            comms_relay_transport=_env(env, "CLAWCREW_COMMS_RELAY_TRANSPORT", "nostr").lower(),
+            comms_message_limit=int(_env(env, "CLAWCREW_COMMS_LIMIT", "200") or 200),
             gate_secret=_env(env, "CLAWCREW_GATE_SECRET"),
             gate_ttl_hours=float(_env(env, "CLAWCREW_GATE_TTL_HOURS", "168") or 168),
             public_base_url=_env(env, "CLAWCREW_PUBLIC_BASE_URL"),

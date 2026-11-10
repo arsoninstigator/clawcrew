@@ -7,6 +7,7 @@
     clawcrew work [--limit]  drain the queue
     clawcrew serve [--port]  run the http api
     clawcrew demo            seed + dispatch + review, end to end, no network
+    clawcrew comms <verb>    keys, rooms, bridges and sync for the signed log
 """
 
 from __future__ import annotations
@@ -145,6 +146,69 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_comms(args: argparse.Namespace) -> int:
+    """one entry point for the room log: who has keys, what a room says, what a
+    bridge would do. nothing here is destructive and nothing prints a secret."""
+    app = _app(args)
+    verb = args.verb
+    if verb == "status":
+        rooms = app.store.query("select id, name from channels order by created_date")
+        print(json.dumps({
+            "custody": app.settings.comms_custody,
+            "humans_enabled": app.settings.comms_humans_enabled,
+            "relay": app.settings.comms_relay,
+            "totals": app.comms.stats(),
+            "rooms": [
+                {"room": row["name"], "id": row["id"], **app.comms.stats(row["id"])}
+                for row in rooms
+            ],
+        }, indent=2))
+        return 0
+    if verb == "keys":
+        agent = app.store.one("select id, name from agents where id = ? or name = ?",
+                              (args.agent, args.agent))
+        if not agent:
+            raise ClawCrewError(f"agent {args.agent} not found")
+        identity = app.comms.identity(agent["id"])
+        print(json.dumps({"agent": agent["name"], **identity}, indent=2))
+        return 0
+    if verb == "join":
+        for agent_id in args.agents:
+            agent = app.store.one("select id from agents where id = ? or name = ?",
+                                  (agent_id, agent_id))
+            if not agent:
+                raise ClawCrewError(f"agent {agent_id} not found")
+            app.comms.add_member(args.room, agent["id"], "agent", args.role)
+        print(json.dumps({"room": args.room, "members": app.comms.members(args.room)}, indent=2))
+        return 0
+    if verb == "say":
+        author = None
+        if args.agent:
+            row = app.store.one("select id from agents where id = ? or name = ?",
+                                (args.agent, args.agent))
+            author = row["id"] if row else None
+        print(json.dumps(app.comms.say(args.room, args.body, author_id=author), indent=2))
+        return 0
+    if verb == "tail":
+        events = app.comms.read(args.room, since_seq=args.since, limit=args.limit)
+        for event in events:
+            print(f"{event['seq']:>5} {event['name']:<14} "
+                  f"{(event['author_id'] or event['npub'][:16]):<22} {event['content'][:80]}")
+        return 0
+    if verb == "verify":
+        print(json.dumps(app.comms.verify(args.event_id), indent=2))
+        return 0
+    if verb == "bridge":
+        print(json.dumps(app.comms.register_bridge(args.room, args.transport,
+                                                  {"relay": args.relay, "url": args.url}
+                                                  if (args.relay or args.url) else {}), indent=2))
+        return 0
+    if verb == "sync":
+        print(json.dumps(app.comms.sync(args.room, args.transport), indent=2))
+        return 0
+    raise ClawCrewError(f"unknown comms verb {verb}")
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -175,6 +239,41 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--reload", action="store_true")
     serve.set_defaults(func=cmd_serve)
+
+    comms = sub.add_parser("comms", help="the signed room log: keys, bridges, sync")
+    comms_sub = comms.add_subparsers(dest="verb", required=True)
+    comms_sub.add_parser("status", help="custody, relay, and per-room counts").set_defaults(func=cmd_comms)
+    keys = comms_sub.add_parser("keys", help="print an agent's public key (never the secret)")
+    keys.add_argument("agent")
+    keys.set_defaults(func=cmd_comms)
+    join = comms_sub.add_parser("join", help="make agents members of a room")
+    join.add_argument("room")
+    join.add_argument("agents", nargs="+")
+    join.add_argument("--role", default="member")
+    join.set_defaults(func=cmd_comms)
+    say = comms_sub.add_parser("say", help="sign and post a room message")
+    say.add_argument("room")
+    say.add_argument("body")
+    say.add_argument("--agent")
+    say.set_defaults(func=cmd_comms)
+    tail = comms_sub.add_parser("tail", help="print a room's log")
+    tail.add_argument("room")
+    tail.add_argument("--since", type=int, default=0)
+    tail.add_argument("--limit", type=int, default=20)
+    tail.set_defaults(func=cmd_comms)
+    verify = comms_sub.add_parser("verify", help="check one event's signature")
+    verify.add_argument("event_id")
+    verify.set_defaults(func=cmd_comms)
+    bridge = comms_sub.add_parser("bridge", help="attach a relay or http bridge to a room")
+    bridge.add_argument("room")
+    bridge.add_argument("transport", choices=["http", "nostr", "buzz"])
+    bridge.add_argument("--relay")
+    bridge.add_argument("--url")
+    bridge.set_defaults(func=cmd_comms)
+    sync = comms_sub.add_parser("sync", help="push and pull a room through its bridges")
+    sync.add_argument("room")
+    sync.add_argument("transport", nargs="?", default=None)
+    sync.set_defaults(func=cmd_comms)
 
     args = parser.parse_args(argv)
     try:
