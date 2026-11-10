@@ -20,7 +20,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from clawcrew.create.sandbox.base import BaseProvider, ExecResult, Handle
+from clawcrew.sandbox.base import BaseProvider, ExecResult, Handle
 from clawcrew.errors import ProviderFailure, ProviderNotConfigured
 
 DEFAULT_BASE = "https://api.superserve.ai"

@@ -171,10 +171,10 @@ python -m clawcrew.cli demo
 python -m clawcrew.cli serve
 ```
 
-last run (2026-11-10, ubuntu 24.04, python 3.12, 2 vcpu): clone of the repo,
-install clean, `make check` 227 tests OK, server up, `/health`, `/providers`,
-`/services` answering, a crew created over http, `demo` completing a task through
-the review gate. that run is also what caught a missing dependency:
+last run (2026-11-11, from a `git clone` of the published repo, python 3.11): install
+clean, `make check` 391 tests OK, `/health`, `/providers`, `/services` answering, a crew
+created over http, `demo` completing a task through the review gate, and the merge that
+brought gates, the brief, connectors and brokered credentials onto one app. that run is also what caught a missing dependency:
 `python-dateutil` was imported by the vendored e2b client and never declared, so
 the suite only passed where it happened to be installed already.
 
@@ -182,7 +182,7 @@ that vm had no nested virtualization, so celesto's microVMs cannot boot there. t
 persistent-computer path needs a host with `/dev/kvm`; the build check says so
 instead of pretending.
 
-309 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+391 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
 workflow validation and gates, the n8n and dify importers, the n8n and dify

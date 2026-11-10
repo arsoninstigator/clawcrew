@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from clawcrew.create.sandbox import superserve
+from clawcrew.sandbox import superserve
 from clawcrew.errors import ProviderFailure, ProviderNotConfigured
 
 

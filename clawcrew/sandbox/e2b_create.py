@@ -13,7 +13,7 @@ import argparse
 import json
 
 from clawcrew.config import Settings
-from clawcrew.create.sandbox import build_registry
+from clawcrew.sandbox import build_registry
 from clawcrew.errors import ClawCrewError
 
 

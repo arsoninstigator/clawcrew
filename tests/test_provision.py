@@ -9,7 +9,7 @@ import unittest
 
 from base import AppCase
 
-from clawcrew.create.sandbox.provision import DISPOSABLE, PERSISTENT, Provisioner
+from clawcrew.sandbox.provision import DISPOSABLE, PERSISTENT, Provisioner
 from clawcrew.errors import ValidationError
 
 
