@@ -7,8 +7,17 @@ name = "clawcrew"
 version = "0.1.0"
 description = "agent crews with persistent computers, reviewable a2a, and visual workflows"
 requires-python = ">=3.11"
-# httpx and attrs are what the vendored provider clients (clawcrew/vendor) need.
-dependencies = ["fastapi>=0.110", "uvicorn>=0.27", "httpx>=0.27", "attrs>=23.2"]
+# the vendored clients (clawcrew/vendor) import attrs, httpx, python-dateutil and
+# pydantic v2, so those are runtime dependencies, not dev extras. a clean-machine
+# build caught dateutil missing here; it is declared now.
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "httpx>=0.27",
+    "attrs>=23.2",
+    "python-dateutil>=2.8",
+    "pydantic>=2.5",
+]
 
 [project.optional-dependencies]
 # e2b command execution goes over envd, which is the e2b sdk's job, not the REST api's
