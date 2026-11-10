@@ -271,3 +271,8 @@ isolation and spawning, and the http surface including auth.
   proxy; multi-tenant scoping is a real design decision, not a bug fix.
 - **no canvas yet.** workflow definitions are the contract for one; nothing in the
   engine assumes a specific editor.
+- **the night is a capability, not a shipped behavior.** the beat fires
+  `schedule.nightly` at 02:00 UTC, but a fresh crew has no rules listening, so
+  nothing runs overnight until the pack is adopted. `docs/remaining.md` is the spec
+  for that pack, the brief, the front door and both canvases, and it is the whole
+  remaining scope in one file.
