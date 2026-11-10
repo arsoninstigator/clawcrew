@@ -55,6 +55,12 @@ the room vocabulary is nip-29, which is the group chat shape rather than an inve
 | 4114 | `action` | a tool call and its result |
 | 24114 | `presence` | a heartbeat. ephemeral, never stored |
 
+one consequence of content addressing that is worth stating plainly: an event cannot be
+retagged. the room id is inside the hash, so moving a message to a different room changes
+its `id` and breaks the signature. mirrored rooms therefore share the room id, and a bridge
+that wanted to map room ids would have to have the author re-sign, which is exactly the
+guarantee you want from a bridge.
+
 the 41xx numbers are in an unregistered range on purpose: a client that does not know them
 skips them, and a client that does learn them reads the `content` and the tags without a
 clawcrew decoder. `presence` sits in the ephemeral range because presence is not history,

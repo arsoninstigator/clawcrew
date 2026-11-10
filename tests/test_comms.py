@@ -314,6 +314,17 @@ class IngestTests(AvatarCase):
         self.assertEqual(record["room_id"], "chan_unknown")
         self.assertIsNone(self.app.store.one("select id from channels where id = ?", ("chan_unknown",)))
 
+    def test_a_retagged_event_does_not_verify(self) -> None:
+        """the room id is inside the hash, so a bridge cannot move a message to a
+        different room on our behalf: mirrored rooms share the room id, which is
+        the whole reason the id is content addressed."""
+        event = Event.build(self.other.pubkey, spec.ROOM_MESSAGE, "hi", [["h", self.room["id"]]]).sign(self.other)
+        self.assertTrue(event.verify())
+        event.tags = [["h", "chan_somewhere_else"]]
+        self.assertFalse(event.verify())
+        with self.assertRaises(ValidationError):
+            self.app.comms.ingest(event)
+
     def test_an_event_without_a_room_is_refused(self) -> None:
         event = Event.build(self.other.pubkey, spec.ROOM_MESSAGE, "no room").sign(self.other)
         with self.assertRaises(ValidationError):
