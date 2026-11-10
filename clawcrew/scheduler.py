@@ -355,7 +355,7 @@ class Worker:
             )
             outcome = self.runner.dispatch(task["id"], max_turns=int(payload.get("max_turns", 6)))
             return {"task_id": task["id"], "run_id": outcome["run_id"]}
-        if job.kind == "task":
+        if job.kind in {"task", "dispatch"}:
             outcome = self.runner.dispatch(
                 payload["task_id"], max_turns=int(payload.get("max_turns", 6))
             )

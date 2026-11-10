@@ -10,6 +10,10 @@ groups:
   /a2a          message send, review queue, review decisions, inbox, log
   /workflows    dag save/validate/run/resume
   /schedules    interval and cron schedules
+  /channels     rooms, each with its own board and conversation
+  /departments  the org chart, coordinator routing, escalation
+  /pov          the workspace as one agent sees it (board, calendar, inbox)
+  /triggers     event -> queued action rules
   /ops          health, providers, queue tick, worker drain, counts
 """
 
@@ -150,6 +154,175 @@ def create_api(app: App | None = None) -> FastAPI:
         return app.crews.put_context(
             team_id, data.get("key", ""), data.get("value"), author=str(data.get("author", "owner"))
         )
+
+    # ---- channels: rooms with their own board ------------------------
+    @api.post("/crews/{team_id}/channels")
+    def create_channel(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.channels.create(
+            team_id=team_id,
+            name=data.get("name", ""),
+            purpose=data.get("purpose", ""),
+            kind=data.get("kind", "channel"),
+            members=data.get("members") or [],
+            lead=data.get("lead_agent_id") or data.get("lead"),
+        )
+
+    @api.get("/crews/{team_id}/channels")
+    def list_channels(team_id: str) -> dict:
+        return app.channels.overview(team_id)
+
+    @api.get("/channels/{channel_id}")
+    def get_channel(channel_id: str) -> dict:
+        return app.channels.get(channel_id)
+
+    @api.patch("/channels/{channel_id}")
+    def update_channel(channel_id: str, payload: dict = Body(...)) -> dict:
+        return app.channels.update(channel_id, **body(payload))
+
+    @api.post("/channels/{channel_id}/members")
+    def join_channel(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if not data.get("agent_id"):
+            raise ValidationError("agent_id is required")
+        return app.channels.join(channel_id, data["agent_id"], role=data.get("role", "member"))
+
+    @api.delete("/channels/{channel_id}/members/{agent_id}")
+    def leave_channel(channel_id: str, agent_id: str) -> dict:
+        return app.channels.leave(channel_id, agent_id)
+
+    @api.post("/channels/{channel_id}/messages")
+    def post_message(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.channels.post(
+            channel_id,
+            data.get("body", ""),
+            author_id=data.get("author_id", ""),
+            author_kind=data.get("author_kind", "agent"),
+            task_id=data.get("task_id"),
+        )
+
+    @api.get("/channels/{channel_id}/messages")
+    def list_messages(
+        channel_id: str,
+        limit: int = Query(50, ge=1, le=200),
+        task_id: str | None = None,
+    ) -> dict:
+        return {"messages": app.channels.messages(channel_id, limit=limit, task_id=task_id)}
+
+    @api.get("/channels/{channel_id}/board")
+    def channel_board(channel_id: str) -> dict:
+        return app.channels.board(channel_id)
+
+    @api.post("/channels/{channel_id}/tasks")
+    def channel_task(channel_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        title = data.pop("title", "")
+        return app.channels.create_task(channel_id, title, **data)
+
+    # ---- departments: the org chart -----------------------------------
+    @api.post("/crews/{team_id}/departments")
+    def create_department(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.departments.create(
+            team_id=team_id,
+            name=data.get("name", ""),
+            coordinator_agent_id=data.get("coordinator_agent_id"),
+            parent_id=data.get("parent_id"),
+            purpose=data.get("purpose", ""),
+            members=data.get("members") or [],
+        )
+
+    @api.get("/crews/{team_id}/departments")
+    def list_departments(team_id: str) -> dict:
+        return {"departments": app.departments.list(team_id)}
+
+    @api.get("/crews/{team_id}/org-chart")
+    def org_chart(team_id: str) -> dict:
+        return app.departments.tree(team_id)
+
+    @api.patch("/departments/{department_id}")
+    def update_department(department_id: str, payload: dict = Body(...)) -> dict:
+        return app.departments.update(department_id, **body(payload))
+
+    @api.post("/departments/{department_id}/members")
+    def add_department_member(department_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if not data.get("agent_id"):
+            raise ValidationError("agent_id is required")
+        return app.departments.add_member(department_id, data["agent_id"])
+
+    @api.post("/tasks/{task_id}/route")
+    def route_task(task_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.departments.route(task_id, data.get("department_id"))
+
+    @api.post("/agents/{agent_id}/escalate")
+    def escalate(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.departments.escalate(
+            agent_id, data.get("body", ""), task_id=data.get("task_id")
+        )
+
+    # ---- pov: the workspace as one agent sees it ----------------------
+    @api.get("/agents/{agent_id}/pov")
+    def agent_pov(agent_id: str, days: int = Query(14, ge=1, le=120)) -> dict:
+        return app.pov.view(agent_id, days=days)
+
+    @api.get("/agents/{agent_id}/board")
+    def agent_board(agent_id: str) -> dict:
+        return app.pov.board(agent_id)
+
+    @api.get("/agents/{agent_id}/calendar")
+    def agent_calendar(agent_id: str, days: int = Query(14, ge=1, le=120)) -> dict:
+        return app.pov.calendar(agent_id, days=days)
+
+    @api.post("/agents/{agent_id}/calendar")
+    def add_calendar_event(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.pov.add_event(
+            agent_id,
+            data.get("title", ""),
+            data.get("starts_at"),
+            ends_at=data.get("ends_at"),
+            kind=data.get("kind", "block"),
+            ref_id=data.get("ref_id", ""),
+        )
+
+    @api.delete("/agents/{agent_id}/calendar/{event_id}")
+    def delete_calendar_event(agent_id: str, event_id: str) -> dict:
+        return app.pov.delete_event(event_id, agent_id=agent_id)
+
+    @api.get("/crews/{team_id}/roster")
+    def roster(team_id: str) -> dict:
+        return {"team_id": team_id, "agents": app.pov.roster(team_id)}
+
+    # ---- triggers: when this happens, queue that ----------------------
+    @api.post("/crews/{team_id}/triggers")
+    def create_trigger(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.triggers.create(
+            team_id=team_id,
+            name=data.get("name", ""),
+            event=data.get("event", ""),
+            action=data.get("action", ""),
+            payload=data.get("payload") or {},
+            condition=data.get("condition", ""),
+            enabled=bool(data.get("enabled", True)),
+        )
+
+    @api.get("/crews/{team_id}/triggers")
+    def list_triggers(team_id: str) -> dict:
+        return {"triggers": app.triggers.list(team_id)}
+
+    @api.post("/triggers/{trigger_id}/enable")
+    def enable_trigger(trigger_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.triggers.set_enabled(trigger_id, bool(data.get("enabled", True)))
+
+    @api.delete("/triggers/{trigger_id}")
+    def delete_trigger(trigger_id: str) -> dict:
+        return app.triggers.delete(trigger_id)
 
     # ---- kanban -------------------------------------------------------
     @api.post("/crews/{team_id}/tasks")

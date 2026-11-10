@@ -11,15 +11,19 @@ from dataclasses import dataclass
 from typing import Any
 
 from .a2a import A2AService
+from .channels import ChannelService
 from .config import Settings
 from .crews import CrewService
+from .departments import DepartmentService
 from .db import Store
 from .kanban import KanbanService
 from .orchestrator import CrewRunner
+from .pov import PovService
 from .runtime import AgentModel
 from .sandbox import ProviderRegistry, build_registry
 from .scheduler import Scheduler, Worker, make_broker
 from .services import ServiceRegistry
+from .triggers import TriggerService
 from .workflows import WorkflowService
 
 
@@ -34,6 +38,10 @@ class App:
     runner: CrewRunner
     services: ServiceRegistry
     workflows: WorkflowService
+    channels: ChannelService
+    departments: DepartmentService
+    triggers: TriggerService
+    pov: PovService
     scheduler: Scheduler
     worker: Worker
 
@@ -52,6 +60,10 @@ class App:
             "workflows": n("workflows"),
             "workflow_runs": n("workflow_runs"),
             "schedules": n("schedules"),
+            "channels": n("channels"),
+            "channel_messages": n("channel_messages"),
+            "departments": n("departments"),
+            "triggers": n("triggers"),
         }
 
 
@@ -68,6 +80,19 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     broker = make_broker(store, settings)
     scheduler = Scheduler(store, broker)
     worker = Worker(store, runner, workflows, broker=broker, scheduler=scheduler)
+
+    # the event graph, wired once. services emit, the trigger engine queues, and
+    # nothing has to know who listens.
+    triggers = TriggerService(store, broker)
+    channels = ChannelService(store, kanban)
+    departments = DepartmentService(store, kanban, a2a)
+    pov = PovService(store, kanban, crews, channels=channels, departments=departments,
+                     scheduler=scheduler)
+    kanban.events_hook = triggers.fire
+    channels.events_hook = triggers.fire
+    departments.events_hook = triggers.fire
+    a2a.events_hook = triggers.fire
+    workflows.events_hook = triggers.fire
     return App(
         settings=settings,
         store=store,
@@ -80,4 +105,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         workflows=workflows,
         scheduler=scheduler,
         worker=worker,
+        channels=channels,
+        departments=departments,
+        triggers=triggers,
+        pov=pov,
     )

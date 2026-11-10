@@ -45,5 +45,42 @@ def run_job(job_id: str) -> dict:
     return {"job": job_id, "ok": True, "outcome": outcome, "finished_at": now()}
 
 
+def tick() -> dict:
+    """celery beat: enqueue every schedule that is due. idempotent by design, so a
+    beat that fires twice costs one extra query, not one extra run."""
+    return {"enqueued": app.scheduler.tick(), "at": now()}
+
+
+def nightly() -> dict:
+    """celery beat, once a night: fire the `schedule.nightly` event, so overnight
+    work is a rule an operator can edit instead of a hardcoded cron in a container."""
+    return {"fired": app.triggers.fire("schedule.nightly", {"team_id": "", "at": now()})}
+
+
+def fire_event(event: str, context: dict | None = None) -> dict:
+    """celery task: emit an event from outside (a webhook, another system) into the
+    same trigger engine the services use."""
+    return {"fired": app.triggers.fire(event, context or {})}
+
+
+def process(limit: int = 10) -> dict:
+    return {"results": app.worker.process(limit)}
+
+
 if celery is not None:
+    from celery.schedules import crontab  # type: ignore
+
     celery.task(name="clawcrew.jobs.run_job")(run_job)
+    celery.task(name="clawcrew.jobs.tick")(tick)
+    celery.task(name="clawcrew.jobs.nightly")(nightly)
+    celery.task(name="clawcrew.jobs.fire_event")(fire_event)
+    celery.task(name="clawcrew.jobs.process")(process)
+    celery.conf.timezone = "UTC"
+    celery.conf.beat_schedule = {
+        "clawcrew-tick": {"task": "clawcrew.jobs.tick", "schedule": 15.0},
+        "clawcrew-nightly": {
+            "task": "clawcrew.jobs.nightly",
+            "schedule": crontab(hour=2, minute=0),
+        },
+    }
+    celery.conf.beat_schedule_filename = "/data/celerybeat-schedule"

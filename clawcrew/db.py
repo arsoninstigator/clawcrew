@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 create table if not exists meta (
@@ -168,6 +168,92 @@ create table if not exists schedules (
 );
 create index if not exists schedules_due on schedules (enabled, next_run_at);
 
+-- channels: a crew's slack-like rooms. each one carries its own board, its own
+-- members and its own conversation, which is the whole point of the split.
+create table if not exists channels (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    slug text not null,
+    purpose text not null default '',
+    kind text not null default 'channel',
+    created_date real not null,
+    updated_date real not null,
+    unique (team_id, slug)
+);
+
+create table if not exists channel_members (
+    channel_id text not null references channels(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    role text not null default 'member',
+    created_date real not null,
+    primary key (channel_id, agent_id)
+);
+
+create table if not exists channel_messages (
+    id text primary key,
+    channel_id text not null references channels(id) on delete cascade,
+    task_id text references tasks(id) on delete set null,
+    author_kind text not null default 'agent',
+    author_id text not null default '',
+    body text not null,
+    created_date real not null
+);
+create index if not exists channel_messages_channel on channel_messages (channel_id, created_date);
+
+-- departments: the hierarchical layer. a department has one accountable head and
+-- reports upward, so routing is a chain instead of a popularity contest.
+create table if not exists departments (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    parent_id text references departments(id) on delete set null,
+    name text not null,
+    slug text not null,
+    purpose text not null default '',
+    coordinator_agent_id text references agents(id) on delete set null,
+    created_date real not null,
+    updated_date real not null,
+    unique (team_id, slug)
+);
+
+create table if not exists department_members (
+    department_id text not null references departments(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    created_date real not null,
+    primary key (department_id, agent_id)
+);
+
+-- triggers: event -> queued action. the queue is celery's job, the rule is ours.
+create table if not exists triggers (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    event text not null,
+    action text not null,
+    payload text not null default '{}',
+    condition text not null default '',
+    enabled integer not null default 1,
+    fired_count integer not null default 0,
+    last_fired_at real,
+    created_date real not null
+);
+create index if not exists triggers_event on triggers (team_id, event, enabled);
+
+-- an agent's own calendar. per-agent pov needs somewhere to put a block that is
+-- not a task and not a schedule.
+create table if not exists agent_events (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    title text not null,
+    kind text not null default 'block',
+    starts_at real not null,
+    ends_at real,
+    ref_id text not null default '',
+    created_date real not null
+);
+create index if not exists agent_events_agent on agent_events (agent_id, starts_at);
+
 create table if not exists job_queue (
     id text primary key,
     kind text not null,
@@ -208,10 +294,22 @@ class Store:
         self._lock = threading.Lock()
         with self.conn() as c:
             c.executescript(SCHEMA)
+            self._add_columns(c)
             c.execute(
                 "insert or replace into meta (key, value) values ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+
+    def _add_columns(self, c: sqlite3.Connection) -> None:
+        """v2 columns on v1 tables. sqlite has no `add column if not exists`, so
+        check the pragma; this stays idempotent for a db created fresh from SCHEMA."""
+        wanted = {"tasks": {"channel_id": "text references channels(id) on delete set null"}}
+        for table, columns in wanted.items():
+            existing = {row["name"] for row in c.execute(f"pragma table_info({table})")}
+            for name, decl in columns.items():
+                if name not in existing:
+                    c.execute(f"alter table {table} add column {name} {decl}")
+        c.execute("create index if not exists tasks_channel on tasks (channel_id, column_name)")
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:

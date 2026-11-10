@@ -23,6 +23,8 @@ DECISIONS = {"approved", "rejected"}
 class A2AService:
     def __init__(self, store: Store):
         self.store = store
+        # set by the composition root to `triggers.fire`
+        self.events_hook = None
 
     # ---- send ----------------------------------------------------------
     def send(
@@ -67,6 +69,10 @@ class A2AService:
                 ),
             )
         return self.get(message_id)
+
+    def _emit(self, team_id: str, message_id: str, **extra) -> None:
+        if self.events_hook:
+            self.events_hook("a2a.message", {"team_id": team_id, "message_id": message_id, **extra})
 
     # ---- review --------------------------------------------------------
     def review(self, message_id: str, decision: str, reviewer: str = "owner", note: str = "") -> dict:

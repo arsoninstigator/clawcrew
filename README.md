@@ -90,6 +90,24 @@ someone approves it. that is the whole point: an unreviewed claim cannot change
 another agent's behaviour. on the wire it is spec-shaped a2a json over json-rpc
 (`/a2a/rpc`, agent cards at `/agents/{id}/card`).
 
+**channel** a room inside a crew: members, a conversation, and **its own board**. a
+task carries a `channel_id`, so `#growth` and `#support` keep separate kanbans while
+the crew board still shows everything. rooms are flat on purpose.
+
+**department** the hierarchy, kept explicit: one coordinator, members reporting to it,
+departments that nest. routing a card to a department puts it on the coordinator's
+desk, and escalation walks up the reporting line as a gated a2a message. hierarchy for
+accountability, channels for conversation.
+
+**pov** the workspace as one agent sees it: their board, their rooms, their calendar
+(derived from explicit blocks, schedule targets and card due dates), their inbox,
+their computer, the context they share, and only what needs attention. switching pov
+is a projection, never a login, which is why it is cheap and honest.
+
+**trigger** when this happens, queue that. `event` + exact-match `condition` +
+`action` + `payload` with `${path}` placeholders. card moves, room messages, finished
+workflows and the nightly beat all reach the same engine, and the queue is celery's.
+
 **workflow** a dag of seven node types, validated on save (no cycles, no dangling
 deps), executed with a `human_gate` that pauses the run until decided. two of the
 seven hand a step to a tool you already run: `n8n` posts to a webhook on your n8n,
@@ -115,6 +133,12 @@ workers never take the same job.
 | `POST /crews/{id}/workflows` `POST /workflows/{id}/run` | workflow dag |
 | `POST /workflow-runs/{id}/resume` | decide a human gate |
 | `POST /crews/{id}/schedules` `POST /ops/tick` `POST /ops/process` | scheduling |
+| `POST /crews/{id}/channels` `GET .../channels` `GET /channels/{id}/board` | rooms and their boards |
+| `POST /channels/{id}/messages` `GET .../messages` `POST /channels/{id}/tasks` | a room's talk and work |
+| `POST /crews/{id}/departments` `GET /crews/{id}/org-chart` `POST /tasks/{id}/route` | the hierarchy |
+| `POST /agents/{id}/escalate` | a member pushing a decision up the line |
+| `GET /agents/{id}/pov` `GET .../board` `GET/POST .../calendar` `GET /crews/{id}/roster` | point of view |
+| `POST /crews/{id}/triggers` `GET .../triggers` `POST /triggers/{id}/enable` | event rules |
 | `GET /health` `GET /providers` `GET /services` | ops, and which self-hosted tools are wired |
 
 `/docs` is the live openapi ui.
@@ -163,7 +187,7 @@ python -m clawcrew.cli demo
 python -m clawcrew.cli serve
 ```
 
-last run (2026-11-10, ubuntu 24.04, python 3.12, 2 vcpu): clone of 714 files,
+last run (2026-11-10, ubuntu 24.04, python 3.12, 2 vcpu): clone of the repo,
 install clean, `make check` 227 tests OK, server up, `/health`, `/providers`,
 `/services` answering, a crew created over http, `demo` completing a task through
 the review gate. that run is also what caught a missing dependency:
@@ -174,12 +198,13 @@ that vm had no nested virtualization, so celesto's microVMs cannot boot there. t
 persistent-computer path needs a host with `/dev/kvm`; the build check says so
 instead of pretending.
 
-227 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+260 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
 workflow validation and gates, the n8n and dify importers, the n8n and dify
-self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, and the
-http surface including auth.
+self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, channel
+boards, department routing and escalation, the pov projection, the trigger engine and
+the celery beat, and the http surface including auth.
 
 ## honest limits
 

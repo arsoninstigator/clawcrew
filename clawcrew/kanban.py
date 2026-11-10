@@ -29,6 +29,9 @@ TRANSITIONS = {
 class KanbanService:
     def __init__(self, store: Store):
         self.store = store
+        # set by the composition root: `triggers.fire`. a null hook keeps tests and
+        # one-off scripts from needing a rule engine to move a card.
+        self.events_hook = None
 
     # ---- tasks ---------------------------------------------------------
     def create_task(
@@ -43,6 +46,7 @@ class KanbanService:
         isolation: str = "agent",
         payload: dict | None = None,
         parent_id: str | None = None,
+        channel_id: str | None = None,
     ) -> dict:
         if not title:
             raise ValidationError("task title is required")
@@ -57,12 +61,12 @@ class KanbanService:
             c.execute(
                 """insert into tasks (id, team_id, parent_id, title, description, column_name,
                        priority, assignee_agent_id, required_skills, isolation, payload, result,
-                       created_date, updated_date)
-                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?)""",
+                       channel_id, created_date, updated_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?, ?)""",
                 (
                     task_id, team_id, parent_id, title, description, column, int(priority),
                     assignee_agent_id, dumps(required_skills or []), isolation,
-                    dumps(payload or {}), ts, ts,
+                    dumps(payload or {}), channel_id, ts, ts,
                 ),
             )
         self._event(task_id, "created", "system", {"column": column, "title": title})
@@ -74,25 +78,46 @@ class KanbanService:
             raise NotFound(f"task {task_id} not found")
         return self._task(row)
 
-    def list_tasks(self, team_id: str, column: str | None = None, limit: int = 200) -> list[dict]:
+    def list_tasks(
+        self,
+        team_id: str,
+        column: str | None = None,
+        limit: int = 200,
+        channel_id: str | None = None,
+        assignee_agent_id: str | None = None,
+    ) -> list[dict]:
+        if channel_id:
+            rows, params = "select * from tasks where team_id = ? and channel_id = ?", [team_id, channel_id]
+            if column:
+                rows += " and column_name = ?"
+                params.append(column)
+            if assignee_agent_id:
+                rows += " and assignee_agent_id = ?"
+                params.append(assignee_agent_id)
+            rows += " order by priority desc, created_date limit ?"
+            params.append(limit)
+            return [self._task(r) for r in self.store.query(rows, tuple(params))]
+        sql = "select * from tasks where team_id = ?"
+        params: list = [team_id]
         if column:
-            rows = self.store.query(
-                "select * from tasks where team_id = ? and column_name = ? order by priority desc, created_date limit ?",
-                (team_id, column, limit),
-            )
-        else:
-            rows = self.store.query(
-                "select * from tasks where team_id = ? order by priority desc, created_date limit ?",
-                (team_id, limit),
-            )
+            sql += " and column_name = ?"
+            params.append(column)
+        if assignee_agent_id:
+            sql += " and assignee_agent_id = ?"
+            params.append(assignee_agent_id)
+        sql += " order by priority desc, created_date limit ?"
+        params.append(limit)
+        rows = self.store.query(sql, tuple(params))
         return [self._task(r) for r in rows]
 
-    def board(self, team_id: str, include_hidden: bool = True) -> dict:
+    def board(self, team_id: str, include_hidden: bool = True,
+              channel_id: str | None = None) -> dict:
         meta = self.column_meta(team_id)
-        tasks = self.list_tasks(team_id, limit=500)
+        tasks = self.list_tasks(team_id, limit=500, channel_id=channel_id)
         shown = [c for c in meta if include_hidden or not c["hidden"]]
         return {
             "team_id": team_id,
+            "channel_id": channel_id,
             "columns": [
                 {**column, "tasks": [t for t in tasks if t["column"] == column["name"]]}
                 for column in shown
@@ -208,6 +233,9 @@ class KanbanService:
                 "insert into task_events (id, task_id, kind, actor, data, created_date) values (?,?,?,?,?,?)",
                 (new_id("evt"), task_id, kind, actor, dumps(data), now()),
             )
+        if self.events_hook:
+            task = self.get_task(task_id)
+            self.events_hook(f"task.{kind}", {"task": task, "actor": actor, "data": data})
 
     def _task(self, row) -> dict:
         return {
@@ -224,6 +252,7 @@ class KanbanService:
             "payload": loads(row["payload"], {}),
             "result": loads(row["result"], {}),
             "review_note": row["review_note"],
+            "channel_id": row["channel_id"] if "channel_id" in row.keys() else None,
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

@@ -1,17 +1,19 @@
 # the clawcrew services. everything here is ours; the tools it plugs into are yours.
 #
-#   docker compose up -d                      api + worker + ticker
+#   docker compose up -d                      api + redis + celery worker + beat
 #   docker compose --profile workflows up -d  ... plus a self-hosted n8n on :5678
+#
+# celery is not optional: the beat fires the tick every 15s (enqueueing due
+# schedules) and the nightly event at 02:00 UTC, and every trigger that queues work
+# goes through the same queue. `CLAWCREW_BROKER=inproc` replaces all of it with an
+# in-process loop, which is what the tests use.
 #
 # dify is not defined here on purpose: it is a stack (api, worker, web, postgres,
 # redis, vector store), not one container. run their docker/docker-compose.yaml,
 # then point CLAWCREW_DIFY_BASE_URL at it. see SELF_HOSTING.md.
 #
 # celesto's runtime boots local microVMs, so it belongs on the host with /dev/kvm,
-# not inside this compose file: pip install celesto && celesto setup. the containers
-# reach it through the CLI only if the image has it; that is why the default
-# deployment runs agents' persistent computers from a worker on the host, or from a
-# worker with the kvm device mapped (see the commented block on `worker`).
+# not inside this compose file: pip install celesto && celesto setup.
 
 services:
   api:
@@ -19,25 +21,34 @@ services:
     ports: ["8000:8000"]
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
+    depends_on: [redis]
     restart: unless-stopped
 
-  # drains the durable queue (scheduled jobs, dispatches)
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]
+    restart: unless-stopped
+
+  # executes queued work: task dispatches, workflow runs, trigger actions
   worker:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["sh", "-c", "while true; do python -m clawcrew.cli work --limit 20 || true; sleep 5; done"]
+    command: ["celery", "-A", "clawcrew.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
+    depends_on: [redis]
     restart: unless-stopped
     # to run persistent computers from this container instead of the host:
     #   build arg INSTALL_CELESTO=true, plus:
     # devices: ["/dev/kvm:/dev/kvm"]
 
-  # enqueues anything due. idempotent, so a 15s loop is fine
-  ticker:
+  # the clock: tick every 15s, nightly at 02:00 UTC
+  beat:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["sh", "-c", "while true; do python -m clawcrew.cli tick || true; sleep 15; done"]
+    command: ["celery", "-A", "clawcrew.jobs", "beat", "--loglevel=info"]
+    depends_on: [redis]
     restart: unless-stopped
 
   # optional: your own n8n, for the `n8n` workflow node
@@ -55,4 +66,5 @@ services:
 
 volumes:
   clawcrew-data:
+  redis-data:
   n8n-data:

@@ -103,6 +103,7 @@ class WorkflowService:
         self.store = store
         self.runner = runner
         self.services = services if services is not None else build_services()
+        self.events_hook = None
         self.crews = CrewService(store, getattr(runner, "registry", None))
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -357,6 +358,20 @@ class WorkflowService:
                 "update workflow_runs set status = ?, state = ?, ended_at = ? where id = ?",
                 (status, dumps(state), now() if terminal else None, run_id),
             )
+        if terminal and self.events_hook:
+            row = self.store.one(
+                """select r.id, w.id as workflow_id, w.name, w.team_id
+                   from workflow_runs r join workflows w on w.id = r.workflow_id
+                   where r.id = ?""",
+                (run_id,),
+            )
+            if row:
+                self.events_hook(
+                    "workflow.finished",
+                    {"team_id": row["team_id"], "run_id": row["id"],
+                     "workflow_id": row["workflow_id"], "name": row["name"],
+                     "status": status, "state": state},
+                )
 
     def get_run(self, run_id: str) -> dict:
         row = self.store.one("select * from workflow_runs where id = ?", (run_id,))
