@@ -69,6 +69,12 @@ class Settings:
     llm_api_key: str = ""
     llm_model: str = "gpt-4.1-mini"
 
+    # credentials, brokered. an agent gets a proxy url and the name of a token
+    # variable; the proxy attaches the real key on the way out.
+    vault_base_url: str = ""
+    vault_proxy_url: str = ""
+    vault_ttl_hours: float = 24.0
+
     # approvals without a login: the link is the credential, so it needs a host to
     # be sent from and a secret to be signed with (generated per db if unset)
     gate_secret: str = ""
@@ -115,6 +121,9 @@ class Settings:
             llm_base_url=_env(env, "CLAWCREW_LLM_BASE_URL"),
             llm_api_key=_env(env, "CLAWCREW_LLM_API_KEY"),
             llm_model=_env(env, "CLAWCREW_LLM_MODEL", "gpt-4.1-mini"),
+            vault_base_url=_env(env, "AGENT_VAULT_URL"),
+            vault_proxy_url=_env(env, "AGENT_VAULT_PROXY_URL"),
+            vault_ttl_hours=float(_env(env, "AGENT_VAULT_TTL_HOURS", "24") or 24),
             gate_secret=_env(env, "CLAWCREW_GATE_SECRET"),
             gate_ttl_hours=float(_env(env, "CLAWCREW_GATE_TTL_HOURS", "168") or 168),
             public_base_url=_env(env, "CLAWCREW_PUBLIC_BASE_URL"),

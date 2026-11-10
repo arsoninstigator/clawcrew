@@ -32,26 +32,6 @@ crew ──┬── agents ── computers (persistent)      ── runs ─�
        └── schedules (interval or cron) ── durable job queue
 ```
 
-## quickstart
-
-```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"     # fastapi, uvicorn, httpx, attrs. no api keys, no docker
-
-python -m clawcrew.cli demo           # seed, run a task, run a workflow, review a message
-python -m clawcrew.cli seed           # a realistic crew you can poke at
-python -m clawcrew.cli inspect        # boards, review queues, context keys
-python -m clawcrew.cli serve          # http on :8000, docs at /docs
-```
-
-for the deployment picture, including the celesto OSS runtime, your own e2b, and
-plugging in your n8n and dify, read `SELF_HOSTING.md`.
-
-no api keys are needed to run the demo: the deterministic model runs the real
-orchestrator, real sandbox and real review gate, it just does not call an llm. adding
-a `CELESTO_API_KEY` or `E2B_API_KEY` switches the same code path onto real compute,
-and `CLAWCREW_LLM_BASE_URL` switches the same code path onto a real model.
-
 ## vendored provider clients
 
 the two hosted providers run on their vendors' **generated** openapi clients, copied
@@ -77,91 +57,36 @@ bug: the layer used to emit proto enums (`ROLE_AGENT`, `TASK_STATE_WORKING`), wh
 the spec does not allow. it emits `agent` and `working` now, and still accepts the
 proto spellings on input.
 
-## concepts
+## vocabulary
 
-**crew** (`teams`) a named group with a mission, a review mode (`reviewed` or
-`open`), an orchestration policy, its own kanban columns, its own context.
+the words this repo uses are not invented here and they are not borrowed from another
+agent platform. every term in the introduction has a definition, a shape and an owner
+in `glossary.md`: crew, agent, computer, task, run, a2a, channel, ando, department, pov,
+shift, handoff, gate, brief, front door, trigger, workflow, profile, provenance,
+connector, coordination.
 
-**agent** a specialist: role, skills, system prompt, a runtime (persistent computer
-or ephemeral), tools. three seed agents are enough to feel like a team: a
-researcher who cites, a writer who only writes from crew research, an operator who
-ships.
+## getting it
 
-**computer** a persistent sandbox per agent, provisioned once and reused. the
-agent's files and installed tooling survive between tasks. this is the celesto
-lifecycle, and by default it is celesto's OSS runtime on your own machine
-(`pip install celesto`, named microVMs, no account). see `SELF_HOSTING.md`.
+running instructions live in `get/`, one folder per entry point. each one says what
+works today and what does not.
 
-**task** a card. moving it is validated against a transition table, and every move
-writes an event, so the board is an audit log with a current-state projection.
+| entry point | folder | status |
+| --- | --- | --- |
+| docker compose, uvicorn, celery | `get/https` | works |
+| http api, curl, openapi ui | `get/api` | works |
+| python package, embedded use | `get/sdk` | works |
+| npm client | `get/npm` | not built |
+| mcp server | `get/mcp` | not built |
 
-**run** one dispatch of one task by one agent: provider, sandbox id, per-turn
-steps, exit codes, stdout. runs are rows, not logs in a file, so you can query them.
-
-**a2a** every agent-to-agent message is a row with sender, recipient, task, thread.
-in a `reviewed` crew a message is `pending` and `inbox()` does not return it until
-someone approves it. that is the whole point: an unreviewed claim cannot change
-another agent's behaviour. on the wire it is spec-shaped a2a json over json-rpc
-(`/a2a/rpc`, agent cards at `/agents/{id}/card`).
-
-**channel** (an *ando* in the original brief) a room inside a crew: members, a
-conversation, and **its own board**. a
-task carries a `channel_id`, so `#growth` and `#support` keep separate kanbans while
-the crew board still shows everything. rooms are flat on purpose.
-
-**department** the hierarchy, kept explicit: one coordinator, members reporting to it,
-departments that nest. routing a card to a department puts it on the coordinator's
-desk, and escalation walks up the reporting line as a gated a2a message. hierarchy for
-accountability, channels for conversation.
-
-**pov** the workspace as one agent sees it: their board, their rooms, their calendar
-(derived from explicit blocks, schedule targets and card due dates), their inbox,
-their computer, the context they share, and only what needs attention. switching pov
-is a projection, never a login, which is why it is cheap and honest.
-
-**trigger** when this happens, queue that. `event` + exact-match `condition` +
-`action` + `payload` with `${path}` placeholders. card moves, room messages, finished
-workflows and the nightly beat all reach the same engine, and the queue is celery's.
-
-**profile** every agent carries its own nine namespaces: `skills`, `scope`, `memory`,
-`instructions`, `knowledge`, `perms`, `tools`, `vertical`, `spawn`. all of it is rows
-keyed by agent, so there is no crew-wide bucket an agent can write into and isolation
-is structural instead of a convention. writes replace, they never deep merge, and
-composition happens once, whole-value, with the losing default reported as `shadowed`.
-`GET /agents/{id}/profile` returns the config plus a fingerprint and the problems it can
-prove; `GET /crews/{id}/isolation` says whether two agents have become the same agent.
-
-**shift** coverage, the way a shop floor does it: a rotation, a slot length, and an
-arithmetic answer to "who is on the bar right now" (`slot_index = (now - anchor) //
-slot`, owner = `rotation[slot_index % len(rotation)]`). nothing about coverage is
-stored except the plan, so a duplicated beat cannot skew it and a missed beat cannot
-skip someone's shift.
-
-**handoff** the shift change, with a body. at every boundary the incoming agent gets a
-bundle: open cards (including the ones the outgoing agent was holding), what is
-blocked, what is waiting on a human, the room's last words, and a next-steps line.
-accepting it transfers the cards and writes an audit row. `mode: sync` means the whole
-rotation works the slot together, so nobody has to accept; `mode: async` is one owner
-per slot with a real handoff.
-
-**provenance** every agent has one permanent `agent_key` (alphanumeric, generated once,
-refused on update) plus a `scope` (permissions, channels, instructions, rules, data
-scope). every action it takes appends a row to its own hash chain, and `verify` recomputes
-the chain, so an edited history is detectable instead of deniable.
-
-**authoring** a workflow can be written by one or more agents (`POST
-/crews/{id}/workflows/propose`). it lands as `proposed` and is inert: `run` refuses it
-until a human calls `approve`. after that, `publish` binds a cron and the beat runs it.
-agents get authorship, humans keep the switch.
-
-**workflow** a dag of seven node types, validated on save (no cycles, no dangling
-deps), executed with a `human_gate` that pauses the run until decided. two of the
-seven hand a step to a tool you already run: `n8n` posts to a webhook on your n8n,
-`dify` runs a workflow on your dify.
-
-**schedule** interval or 5-field cron, durable, feeding the same job queue the api
-uses. `tick()` is idempotent; the queue claim is a single serialized update so two
-workers never take the same job.
+- no api keys are needed for the demo. the deterministic model runs the real
+  orchestrator, the real sandbox and the real review gate, it just does not call an llm
+- `CELESTO_API_KEY` or `E2B_API_KEY` switches that same code path onto real compute
+- `CLAWCREW_LLM_BASE_URL` switches the same code path onto a real model
+- deployment detail, including the celesto OSS runtime on your own machine and your
+  n8n and dify, is in `SELF_HOSTING.md`
+- the database and the per-agent credentials story is in `docs/backend.md`
+- `make check` and `python -m clawcrew.cli demo` stay where they were, for the
+  impatient
 
 ## api
 
@@ -213,6 +138,9 @@ every knob is an env var (see `.env.example`).
 | `CELERY_BROKER_URL` `CELERY_QUEUE` | celery wiring |
 | `CLAWCREW_LLM_BASE_URL` `CLAWCREW_LLM_API_KEY` `CLAWCREW_LLM_MODEL` | any openai-compatible endpoint |
 | `CLAWCREW_API_TOKEN` | shared bearer token; `/health` stays open |
+| `AGENT_VAULT_PROXY_URL` `AGENT_VAULT_URL` | brokered credentials instead of keys in the environment |
+| `CLAWCREW_GATE_SECRET` `CLAWCREW_PUBLIC_BASE_URL` | signs approval links, and the host they point at |
+| `SUPERSERVE_API_KEY` | the one target whose runtime is not yours; opt in |
 | `CLAWCREW_REVIEW_MODE` | default review mode for new crews |
 | `CLAWCREW_MAX_PARALLEL` | concurrent dispatches per `dispatch_ready` |
 

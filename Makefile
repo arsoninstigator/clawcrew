@@ -33,3 +33,6 @@ vendor-audit:
 
 clean:
 	rm -rf demo_data .pytest_cache **/__pycache__
+
+ddl:
+	python scripts/export_ddl.py > docs/schema.postgres.sql

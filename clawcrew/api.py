@@ -1057,4 +1057,37 @@ def create_api(app: App | None = None) -> FastAPI:
             dry_run=bool(data.get("dry_run", True)),
         )
 
+    # ---- brokered credentials, per agent -------------------------------
+    @api.get("/vault")
+    def vault_health() -> dict:
+        return app.vault.health()
+
+    @api.post("/agents/{agent_id}/vault")
+    def grant_vault(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.vault.grant(
+            agent_id,
+            label=data.get("label", ""),
+            token_env=data.get("token_env", ""),
+            proxy_url=data.get("proxy_url", ""),
+            scopes=data.get("scopes") or [],
+            expires_hours=data.get("expires_hours"),
+            issued_by=data.get("actor", "owner"),
+        )
+
+    @api.get("/agents/{agent_id}/vault")
+    def list_vault(agent_id: str) -> dict:
+        return {"grants": app.vault.list(agent_id=agent_id),
+                "env": app.vault.describe_env(agent_id)}
+
+    @api.delete("/vault/{grant_id}")
+    def revoke_vault(grant_id: str, reason: str = Query(default=""),
+                     actor: str = Query(default="owner")) -> dict:
+        return app.vault.revoke(grant_id, actor=actor, reason=reason)
+
+    @api.post("/vault/egress")
+    def vault_egress(payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.vault.egress_allowed(data.get("agent_id", ""), data.get("host", ""))
+
     return api

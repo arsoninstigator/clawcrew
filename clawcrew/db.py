@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 create table if not exists meta (
@@ -452,7 +452,24 @@ create table if not exists trigger_log (
 create index if not exists asks_team on asks (team_id, created_date);
 create index if not exists gates_open on gates (team_id, status, expires_at);
 create index if not exists knowledge_team on knowledge_docs (team_id, connector_id);
-create index if not exists trigger_log_team on trigger_log (team_id, created_date);"""
+create index if not exists trigger_log_team on trigger_log (team_id, created_date);
+create table if not exists agent_vault (
+    id text primary key,
+    team_id text not null default '',
+    agent_id text not null references agents(id) on delete cascade,
+    label text not null default '',
+    proxy_url text not null default '',
+    token_env text not null default '',
+    scopes text not null default '[]',
+    status text not null default 'active',
+    issued_by text not null default 'owner',
+    expires_at real,
+    revoked_at real,
+    created_date real not null,
+    unique (agent_id, label)
+);
+create index if not exists agent_vault_agent on agent_vault (agent_id, status);
+"""
 
 
 def new_id(prefix: str) -> str:

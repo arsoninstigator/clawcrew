@@ -318,3 +318,21 @@ endpoints exercised over http against a real crew, then the sandbox terminated.
    as optional enrichment that cannot change a number.
 5. **an `n8n`/`dify` node against an unconfigured instance.** save-and-flag or refuse.
    proposal: refuse in the editor, allow over the api so imports round-trip.
+
+## as of 11 nov 2026
+
+wired this week, with tests that hold it: gates and their signed links, the front door
+(`/ask`), the morning brief, workspace connectors with supervisor grants, the coordination
+contract, and brokered per-agent credentials (`manage/agent_vault`).
+
+still open, in the order it is worth doing:
+
+1. **retire the duplicate modules.** the services that ran the merge live in
+   `create/`, `comms/`, `manage/`, `orgchart/` and `work/`, and several of them are a
+   second copy of a flat module (`clawcrew/crews.py` and `create/crew/service.py` are the
+   same service). `app.py` imports the flat ones, so the copies are dead weight that makes
+   the tree read as two projects. deleting them is mechanical: the suite is the contract.
+2. **postgres store.** `docs/schema.postgres.sql` is generated and portable; the adapter is
+   four methods plus two dialect fixes, listed in `docs/backend.md`.
+3. **sandbox env injection.** `CredentialBroker.sandbox_env()` is built and tested; the
+   provider interface needs an `env` argument before a sandbox can actually use it.

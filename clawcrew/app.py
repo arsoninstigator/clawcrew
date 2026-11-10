@@ -13,6 +13,7 @@ from typing import Any
 from .a2a import A2AService
 from .create.coordination import SqliteCoordination
 from .create.intake import AskService
+from .manage.agent_vault import CredentialBroker
 from .manage.approvals.service import GateService
 from .manage.knowledge.service import ConnectorService
 from .work.overnight.service import BriefService
@@ -57,6 +58,7 @@ class App:
     gates: GateService
     brief: BriefService
     connectors: ConnectorService
+    vault: CredentialBroker
     asks: AskService
     coordination: SqliteCoordination
 
@@ -109,6 +111,7 @@ class App:
             "briefs": n("briefs"),
             "connectors": n("connectors"),
             "knowledge_docs": n("knowledge_docs"),
+            "vault_grants": n("agent_vault"),
         }
 
 
@@ -167,6 +170,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     asks = AskService(store, crews, kanban, runner, channels=channels,
                       departments=departments, audit=audit, events_hook=emit)
     coordination = SqliteCoordination(store)
+    vault = CredentialBroker(store, crews=crews, audit=audit, settings=settings)
 
     worker.brief = brief
     worker.shifts = shifts
@@ -207,4 +211,5 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         connectors=connectors,
         asks=asks,
         coordination=coordination,
+        vault=vault,
     )

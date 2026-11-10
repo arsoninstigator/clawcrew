@@ -257,6 +257,25 @@ class AuditService:
                 },
             )
 
+        if event in {"vault.granted", "vault.revoked"}:
+            agent_id = agent_of(context.get("agent_id"))
+            if not agent_id:
+                return None
+            return self.record(
+                team_id=team_id or context.get("agent_team_id", ""),
+                agent_id=agent_id,
+                action=event,
+                actor_kind="human" if actor and not str(actor).startswith("agent_") else "agent",
+                actor_id=actor or agent_id,
+                target_kind="vault",
+                target_id=context.get("grant_id", ""),
+                payload={
+                    "label": context.get("label", ""),
+                    "scopes": context.get("scopes", []),
+                    "reason": context.get("reason", ""),
+                },
+            )
+
         if event == "a2a.message":
             message = context.get("message") or {}
             agent_id = agent_of(message.get("from_agent_id"))
