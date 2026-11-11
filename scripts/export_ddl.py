@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from clawcrew.db import SCHEMA  # noqa: E402
+from core.db import SCHEMA  # noqa: E402
 
 TYPES = {
     "real": "double precision",

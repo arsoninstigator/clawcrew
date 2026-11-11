@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 CLAWCREW_DB=/data/clawcrew.db
 # everything the vendored provider clients need is declared in pyproject; no extra
 # package is required for the api itself.
 COPY pyproject.toml README.md ./
-COPY clawcrew ./clawcrew
+COPY core api agents work comms org manage create sandbox integrations ./clawcrew
 RUN pip install --no-cache-dir -e .
 
 # the celesto OSS runtime boots local microVMs, so it needs the host's /dev/kvm.
