@@ -1,5 +1,10 @@
 """self-hosted workflow tools, plugged in over their own apis.
 
+itsaplan is the board the crews share: projects, issues, agents as members, and a
+runner contract (claim, heartbeat, events, result) that a crew pulls from directly,
+so project management is something agents drive among themselves rather than a node
+in a workflow. it is agpl-3.0, so like the rest it is a client, never a copy.
+
 n8n and dify are source-available, not Apache/MIT, so no code of theirs is copied
 here: their *export formats* are imported in `clawcrew/importers.py`, and this
 package talks to **your own instance** over the api that instance already publishes.
@@ -13,9 +18,9 @@ into plain dicts and raise `ProviderFailure`, so a workflow node never sees http
 from __future__ import annotations
 
 from core.config import Settings
-from integrations import dify, langflow, n8n, sim
+from integrations import dify, itsaplan, langflow, n8n, sim
 
-__all__ = ["ServiceRegistry", "build_services", "dify", "langflow", "n8n", "sim"]
+__all__ = ["ServiceRegistry", "build_services", "dify", "itsaplan", "langflow", "n8n", "sim"]
 
 
 class ServiceRegistry:
@@ -24,13 +29,16 @@ class ServiceRegistry:
         self.n8n = n8n.make(settings.n8n_base_url, settings.n8n_api_key)
         self.langflow = langflow.make(getattr(settings, "langflow_base_url", ""),
                                       getattr(settings, "langflow_api_key", ""))
+        self.itsaplan = itsaplan.make(getattr(settings, "itsaplan_base_url", ""),
+                                      getattr(settings, "itsaplan_api_key", ""))
         self.sim = sim.make(getattr(settings, "sim_base_url", ""),
                             getattr(settings, "sim_api_key", ""))
         self.dify = dify.make(settings.dify_base_url, settings.dify_api_key, settings.dify_user)
 
     def status(self) -> dict:
         return {"n8n": self.n8n.status(), "dify": self.dify.status(),
-                "langflow": self.langflow.status(), "sim": self.sim.status()}
+                "langflow": self.langflow.status(), "sim": self.sim.status(),
+                "itsaplan": self.itsaplan.status()}
 
 
 def build_services(settings: Settings | None = None) -> ServiceRegistry:

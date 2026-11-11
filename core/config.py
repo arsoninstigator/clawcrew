@@ -55,6 +55,8 @@ class Settings:
     # self-hosted workflow tools, plugged in over their own apis
     n8n_base_url: str = "http://localhost:5678"
     n8n_api_key: str = ""
+    itsaplan_base_url: str = "http://localhost:4000"
+    itsaplan_api_key: str = ""
     langflow_base_url: str = "http://localhost:7860"
     langflow_api_key: str = ""
     sim_base_url: str = "http://localhost:3000"
@@ -135,6 +137,8 @@ class Settings:
             e2b_default_template=_env(env, "E2B_TEMPLATE", "base"),
             n8n_base_url=_env(env, "CLAWCREW_N8N_BASE_URL", "http://localhost:5678"),
             n8n_api_key=_env(env, "CLAWCREW_N8N_API_KEY"),
+            itsaplan_base_url=_env(env, "CLAWCREW_ITSAPLAN_BASE_URL", "http://localhost:4000"),
+            itsaplan_api_key=_env(env, "CLAWCREW_ITSAPLAN_API_KEY"),
             langflow_base_url=_env(env, "CLAWCREW_LANGFLOW_BASE_URL", "http://localhost:7860"),
             langflow_api_key=_env(env, "CLAWCREW_LANGFLOW_API_KEY"),
             sim_base_url=_env(env, "CLAWCREW_SIM_BASE_URL", "http://localhost:3000"),

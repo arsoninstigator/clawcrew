@@ -36,8 +36,7 @@ from agents.orchestrator import CrewRunner
 from sandbox import Handle
 from integrations import build_services
 
-NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n",
-              "dify", "langflow", "sim"}
+NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n", "dify"}
 
 # draft: a human sketch. proposed: handed in by agents, waiting on approval.
 # active: runs. archived: kept, never runs.
@@ -71,10 +70,6 @@ def validate_definition(definition: Any) -> dict:
                 raise ValidationError(f"node '{node['id']}' depends on unknown node '{dep}'")
         if node["type"] == "n8n" and not (node.get("path") or node.get("webhook")):
             raise ValidationError(f"node '{node['id']}' is an n8n node and needs a webhook 'path'")
-        if node["type"] == "langflow" and not (node.get("flow_id") or node.get("flow")):
-            raise ValidationError(f"node '{node['id']}' is a langflow node and needs a 'flow_id'")
-        if node["type"] == "sim" and not (node.get("workflow_id") or node.get("workflow")):
-            raise ValidationError(f"node '{node['id']}' is a sim node and needs a 'workflow_id'")
         if node["type"] == "branch":
             targets = node.get("targets") or []
             if not isinstance(targets, list) or not targets:
@@ -450,10 +445,6 @@ class WorkflowService:
                 return self._node_n8n(workflow, node, state)
             if kind == "dify":
                 return self._node_dify(workflow, node, state)
-            if kind == "langflow":
-                return self._node_langflow(workflow, node, state)
-            if kind == "sim":
-                return self._node_sim(workflow, node, state)
             if kind == "branch":
                 chosen = self._branch_targets(node, state)
                 state["outputs"][node["id"]] = chosen
@@ -537,38 +528,6 @@ class WorkflowService:
         outcome = {"status": "failed" if failed else "succeeded", "output": data}
         if failed:
             outcome["error"] = str((data or {}).get("error") or "dify reported failure")
-        return outcome
-
-    def _node_langflow(self, workflow: dict, node: dict, state: dict) -> dict:
-        """delegate one step to a flow that already lives in langflow."""
-        flow_id = str(self._render(node.get("flow_id") or node.get("flow"), state) or "")
-        value = self._render(node.get("input") or node.get("input_value") or "", state)
-        result = self.services.langflow.run_flow(
-            flow_id, "" if value is None else str(value),
-            tweaks=node.get("tweaks") or {},
-            session_id=str(node.get("session_id") or ""),
-        )
-        state["outputs"][node["id"]] = result.get("text")
-        failed = bool(node.get("expect_text")) and not result.get("text")
-        outcome = {"status": "failed" if failed else "succeeded",
-                   "output": result.get("text"), "flow_id": flow_id}
-        if failed:
-            outcome["error"] = "langflow returned no text"
-        return outcome
-
-    def _node_sim(self, workflow: dict, node: dict, state: dict) -> dict:
-        """delegate one step to a workflow that already lives in sim."""
-        workflow_id = str(self._render(node.get("workflow_id") or node.get("workflow"), state) or "")
-        inputs = self._render(node.get("inputs"), state) or {}
-        if not isinstance(inputs, dict):
-            inputs = {"input": inputs}
-        result = self.services.sim.execute(workflow_id, inputs, sync=bool(node.get("sync", True)))
-        state["outputs"][node["id"]] = result.get("output")
-        outcome = {"status": "succeeded" if result.get("ok") else "failed",
-                   "output": result.get("output"), "workflow_id": workflow_id,
-                   "execution_id": result.get("execution_id", "")}
-        if not result.get("ok"):
-            outcome["error"] = result.get("error") or "sim reported failure"
         return outcome
 
     def _node_agent_task(self, workflow: dict, node: dict, state: dict) -> dict:

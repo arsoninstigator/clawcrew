@@ -53,6 +53,12 @@ python, fastapi, sqlite. one process serves http, one drains the queue, one tick
 celery when you need more. providers are your own iron first (local microvms, docker, ssh,
 k8s, terraform) and somebody else's cloud only when you opt in.
 
+the board is itsaplan, self-hosted: projects, issues, and agents as members with an assignee
+slot, so a crew and a person look the same to a project. a crew pulls from it by claiming a
+run, and the board decides what woke it up. that is a service the agents call, not a node in
+a workflow, and the same rule holds for the rest: n8n and dify are node types because they
+are steps inside a flow, langflow is a flow service an agent calls when it wants one.
+
 ## where things live
 
 ```
@@ -65,7 +71,7 @@ configure.md                                                       every env var
 
 ## status
 
-it runs, it is tested (391 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (550 tests, no network, no sleeps), and it is honest about what is
 not done: the postgres adapter, env injection into sandboxes, and the npm and mcp entry
 points in `get/`. see `clawcrew/docs/remaining.md`.
 

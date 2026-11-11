@@ -67,3 +67,25 @@ variables and the vault routes say so instead of pretending.
 licences and provenance for the vendored clients are in `clawcrew/thirdparty.md`, the
 schema and deployment story is in `clawcrew/docs/backend.md`, and the words are in
 `clawcrew/glossary.md`.
+
+### the board
+
+```sh
+CLAWCREW_ITSAPLAN_BASE_URL=http://localhost:4000   # the api origin of your itsaplan instance
+CLAWCREW_ITSAPLAN_API_KEY=                         # an external agent's key, from its page in the instance
+```
+
+create the agent in the instance, give it a role and a project, copy its key.
+`ItsaplanBridge.poll()` is the whole loop: claim one run, heartbeat it, run the crew's turn,
+post the result. with no key the board is reported as not
+configured and every board call says so instead of guessing. enable the mcp server per
+project there if you also want its tools inside an agent's own cli.
+
+### flows
+
+```sh
+CLAWCREW_LANGFLOW_BASE_URL=http://localhost:7860  # a langflow instance you run
+CLAWCREW_LANGFLOW_API_KEY=
+```
+
+a flow is a service, not a workflow node: an agent calls it when it wants one.

@@ -52,3 +52,6 @@ interoperability, which is what users of an open tool actually need.
   which is why `clawcrew/vendor/e2b_api/LICENSE` is the upstream file, unedited.
 - no project listed above is claimed as endorsed by clawcrew, and clawcrew is not
   endorsed by any of them.
+
+| [croffasia/itsaplan](https://github.com/croffasia/itsaplan) | AGPL-3.0 | the board. run as a separate service and talked to over its http api, so no code is copied, linked or modified here. the licence is the strong one, which is exactly why the boundary is a socket and not an import. |
+| [langflow-ai/langflow](https://github.com/langflow-ai/langflow) | MIT | a flow service an agent calls (`integrations/langflow.py`). not a workflow node, and never vendored: your instance, your key. |

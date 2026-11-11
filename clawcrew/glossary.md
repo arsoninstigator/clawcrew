@@ -150,3 +150,23 @@ a dag of seven node types, validated on save (no cycles, no dangling deps), exec
 a `human_gate` that pauses the run until decided. two of the seven hand a step to a tool
 you already run: `n8n` posts to a webhook on your n8n, `dify` runs a workflow on your
 dify.
+
+## board
+
+the project management a crew shares, run on itsaplan. projects hold issues, and an agent is
+a member with a role and an assignee slot, so assigning an issue to an agent is the same
+gesture as assigning it to a person. clawcrew holds an api key per agent and pulls.
+
+## run
+
+what the board hands an agent: the issue, the prompt, the system prompt, and a run id. the
+claim is atomic, so a run is either yours or a 409 and you take a different issue. while it
+works the agent heartbeats and posts events, and it posts a result even when the turn raised,
+because a run left open blocks the issue for everyone else.
+
+## node or service
+
+a node is a step inside a workflow: n8n and dify are nodes. a service is something an agent
+calls itself, whenever it decides to: the browser, the sandbox, langflow for a flow, and the
+board. the difference is who decides the order. a workflow decides for a node; the agent
+decides for a service.
