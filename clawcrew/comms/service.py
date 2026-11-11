@@ -92,10 +92,16 @@ class CommsService:
         return self._identity(row) if row else None
 
     def _identity(self, row) -> dict:
+        # the agentid is derived from this pubkey rather than stored beside it: the same
+        # key signs room events and audit rows, so there is one principal with two proofs
+        # and no second identity to keep in step.
+        from .. import attest
+
         return {
             "agent_id": row["agent_id"],
             "team_id": row["team_id"],
             "handle": row["handle"],
+            "agentid": attest.agentid_for(row["pubkey"]),
             "pubkey": row["pubkey"],
             "npub": keys.bech32.npub(row["pubkey"]),
             "custody": row["custody"],

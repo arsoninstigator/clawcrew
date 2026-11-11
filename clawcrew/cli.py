@@ -209,6 +209,102 @@ def cmd_comms(args: argparse.Namespace) -> int:
     raise ClawCrewError(f"unknown comms verb {verb}")
 
 
+def cmd_import_agent(args: argparse.Namespace) -> int:
+    """bring an agent in from a file, a directory or a url, in whatever format it is."""
+    from .agent_imports import import_agent
+
+    app = _app(args)
+    team_id = args.team or app.crews.list_teams()[0]["id"]
+    manifest = import_agent(args.source, source=args.format or "",
+                            agent_name=args.entry or "")
+    if args.dry_run_manifest:
+        print(json.dumps(manifest.to_dict(), indent=2))
+        return 0
+    from .agent_imports import adopt
+
+    outcome = adopt(app, team_id, manifest, name=args.name or "")
+    print(json.dumps({"agent": outcome["agent"]["id"], "name": outcome["agent"]["name"],
+                      "imported_from": outcome["imported_from"],
+                      "warnings": outcome["warnings"]}, indent=2))
+    return 0
+
+
+def cmd_export_agent(args: argparse.Namespace) -> int:
+    from .agent_imports import export_agent
+
+    app = _app(args)
+    agent = app.crews.get_agent(args.agent_id)
+    profile = app.profile.profile(agent["id"]) if app.profile is not None else {}
+    print(json.dumps(export_agent(agent, profile), indent=2))
+    return 0
+
+
+def cmd_agent_formats(args: argparse.Namespace) -> int:
+    from .agent_imports import AGENT_SOURCES
+
+    print(json.dumps(AGENT_SOURCES, indent=2))
+    return 0
+
+
+def cmd_attest(args: argparse.Namespace) -> int:
+    """print an agent's signed trail, and say whether it verifies."""
+    app = _app(args)
+    if args.verify_file:
+        bundle = json.loads(open(args.verify_file, encoding="utf-8").read())
+        from . import attest
+
+        print(json.dumps(attest.verify_entries(bundle.get("entries") or []), indent=2))
+        return 0
+    if not args.agent_id:
+        raise ClawCrewError("pass an agent id, or --verify <bundle.json>")
+    print(json.dumps(app.audit.export(args.agent_id), indent=2))
+    return 0
+
+
+def cmd_principal(args: argparse.Namespace) -> int:
+    app = _app(args)
+    print(json.dumps(app.audit.paired(args.agent_id), indent=2))
+    return 0
+
+
+def cmd_teams(args: argparse.Namespace) -> int:
+    app = _app(args)
+    if args.join:
+        print(json.dumps(app.crews.join_team(args.agent_id, args.join, role=args.role or ""),
+                         indent=2))
+        return 0
+    if args.leave:
+        print(json.dumps(app.crews.leave_team(args.agent_id, args.leave), indent=2))
+        return 0
+    print(json.dumps(app.crews.teams_of(args.agent_id), indent=2))
+    return 0
+
+
+def cmd_persistence(args: argparse.Namespace) -> int:
+    app = _app(args)
+    print(json.dumps(app.crews.set_persistence(args.agent_id, args.mode), indent=2))
+    return 0
+
+
+def cmd_browser(args: argparse.Namespace) -> int:
+    app = _app(args)
+    if args.action == "providers":
+        print(json.dumps(app.browsers.status(), indent=2))
+        return 0
+    if args.action == "list":
+        print(json.dumps(app.browsers.list(args.agent_id or None), indent=2))
+        return 0
+    if args.action == "close":
+        print(json.dumps(app.browsers.close(args.session_id), indent=2))
+        return 0
+    if args.action == "run":
+        print(json.dumps(app.browsers.run(args.agent_id, args.task or "", task_id=args.task_id),
+                         indent=2))
+        return 0
+    print(json.dumps(app.browsers.open(args.agent_id, task_id=args.task_id), indent=2))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -234,6 +330,45 @@ def main(argv: list[str] | None = None) -> int:
     work.add_argument("--limit", type=int, default=10)
     work.set_defaults(func=cmd_work)
     sub.add_parser("demo", help="seed, run, and review end to end").set_defaults(func=cmd_demo)
+    bring = sub.add_parser("import-agent", help="adopt an agent from a file, directory or url")
+    bring.add_argument("source")
+    bring.add_argument("--team", help="crew id (default: the first crew)")
+    bring.add_argument("--format", help="force a format instead of detecting it")
+    bring.add_argument("--entry", help="which agent to take from a multi agent config")
+    bring.add_argument("--name", help="store it under a different name")
+    bring.add_argument("--manifest", dest="dry_run_manifest", action="store_true",
+                       help="print the manifest instead of creating the agent")
+    bring.set_defaults(func=cmd_import_agent)
+    take = sub.add_parser("export-agent", help="print an agent as a portable manifest")
+    take.add_argument("agent_id")
+    take.set_defaults(func=cmd_export_agent)
+    sub.add_parser("agent-formats", help="list the agent formats this can read").set_defaults(
+        func=cmd_agent_formats)
+    take_attest = sub.add_parser("attest", help="print or verify a signed trail")
+    take_attest.add_argument("agent_id", nargs="?")
+    take_attest.add_argument("--verify", dest="verify_file", help="verify a bundle from disk")
+    take_attest.set_defaults(func=cmd_attest)
+    principal = sub.add_parser("principal", help="the agentid, its key, and both proofs")
+    principal.add_argument("agent_id")
+    principal.set_defaults(func=cmd_principal)
+    teams = sub.add_parser("teams", help="crews an agent works in")
+    teams.add_argument("agent_id")
+    teams.add_argument("--join", help="crew id to join")
+    teams.add_argument("--leave", help="crew id to leave")
+    teams.add_argument("--role")
+    teams.set_defaults(func=cmd_teams)
+    persistence = sub.add_parser("persistence", help="workspace or task_state")
+    persistence.add_argument("agent_id")
+    persistence.add_argument("mode")
+    persistence.set_defaults(func=cmd_persistence)
+    browser = sub.add_parser("browser", help="open, list, run or close an agent browser")
+    browser.add_argument("action", nargs="?", default="open",
+                         choices=["open", "list", "close", "run", "providers"])
+    browser.add_argument("agent_id", nargs="?")
+    browser.add_argument("--task", help="the goal to run when action is run")
+    browser.add_argument("--task-id")
+    browser.add_argument("--session", dest="session_id")
+    browser.set_defaults(func=cmd_browser)
     serve = sub.add_parser("serve", help="run the http api")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8000)

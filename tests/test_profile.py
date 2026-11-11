@@ -183,7 +183,8 @@ class SpawnTests(AppCase):
         self.assertEqual(self.app.profile.children(self.a["id"]), [])
         self.assertEqual(len(self.app.profile.children(self.a["id"], include_retired=True)), 1)
         actions = [entry["action"] for entry in self.app.audit.history(self.a["id"])]
-        self.assertIn("agent.spawned", actions)
+        # a spawn is a subagent spawn now: the row names the lane, not just the child
+        self.assertIn("subagent.spawned", actions)
         self.assertIn("agent.retired", actions)
 
 

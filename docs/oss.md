@@ -139,6 +139,47 @@ they are two files and not a dependency.
 - the local dev path is `bunx durable-actors dev`, which is how the actor definitions can
   be exercised without a cluster.
 
+## browser access
+
+two lanes, both open source, neither requiring an account or a key. this is the one place
+where the obvious choice is also the wrong one: every "agent that browses" product in this
+space expects you to rent a browser and paste a key, which means a third party holds every
+session cookie the agent touches.
+
+**browser-use** (`browser-use/browser-use`, MIT) is the driver. it is a python library
+that writes python against the chrome devtools protocol in a persistent repl, and it hosts
+nothing: `Browser('chromium')` launches a local chrome with its own profile, and the
+library accepts any cdp endpoint. pinned exactly (`browser-use==1.0.2`), because the
+project moves fast; the adapter builds the browser from keyword arguments filtered through
+`inspect.signature`, so a version that dropped an argument fails with a sentence instead
+of halfway through a run. the library's own default in 1.0 is a hosted browser behind
+`BROWSER_USE_API_KEY`; we never take that path, and `browser-use` being absent raises the
+install line rather than falling back to the cloud.
+
+**kernel-images** (`kernel/kernel-images`, Apache-2.0) is the browser, for when you want
+one that cannot touch the agent's computer. the hosted control plane at kernel.sh is
+closed source and is not used; what is used is the repository that powers it, which is
+chrome in a container with cdp on 9222, built locally
+(`images/chromium-headful/build-docker.sh`) or run as a unikraft unikernel. there is no
+guessed image tag: `CLAWCREW_KERNEL_IMAGES_IMAGE` names the image you built and
+`CLAWCREW_KERNEL_CDP` attaches to a browser you already started.
+
+the two compose: kernel-images gives a disposable chrome, browser-use drives it. equally
+valid is neither container at all, with browser-use driving the chrome already inside the
+agent's persistent computer.
+
+### browser lanes considered and not taken
+
+**playwright and puppeteer** are excellent cdp clients and are what kernel-images is
+documented against, but they are libraries an agent's *code* uses, not an agent that
+decides. the driver here has to plan in a loop, so browser-use is the layer above them
+and either can still be called from a computer's shell.
+
+**hosted browser fleets** (browserbase, steel cloud, kernel cloud) were declined on the
+same rule as the rest of this repo: an agent's browser is part of the agent's own
+boundary. the self hostable alternatives (browserless, steel's open source images) remain
+options behind the same provider interface.
+
 ### considered and not taken
 
 **deno celld** and **rivet** are both real self hostable durable object runtimes. not

@@ -8,8 +8,11 @@ shares it across requests.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
+from . import attest
+from . import browser as browser_layer
 from .a2a import A2AService
 from .create.coordination import SqliteCoordination
 from .create.intake import AskService
@@ -17,6 +20,9 @@ from .manage.agent_vault import CredentialBroker
 from .manage.approvals.service import GateService
 from .manage.knowledge.service import ConnectorService
 from .work.overnight.service import BriefService
+from .work.ops import build_checks, build_ops
+from .work.poll.service import PollService
+from .work.saga.service import SagaService
 from .audit import AuditService
 from .channels import ChannelService
 from .comms import CommsGateway, CommsService
@@ -64,6 +70,11 @@ class App:
     coordination: SqliteCoordination
     comms: CommsService
     comms_gateway: CommsGateway
+    sagas: SagaService
+    polls: PollService
+    browsers: browser_layer.BrowserService
+    ops: Any
+    checks: Any
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
@@ -120,11 +131,37 @@ class App:
         }
 
 
+def _computer_cdp(crews: CrewService):
+    """the cdp endpoint of an agent's own chrome, if its computer publishes one.
+
+    browser-use should drive the browser that is already inside the agent's computer
+    rather than start a second one beside it: one profile, one set of logins, one thing
+    to close. a computer that does not publish an endpoint returns nothing, and the
+    driver launches its own chromium instead.
+    """
+
+    def lookup(agent_id: str) -> str:
+        computer = crews.get_computer(agent_id)
+        if not computer:
+            return ""
+        handle = computer.get("handle") or {}
+        for key in ("cdp_url", "cdp", "browser_cdp_url", "web_socket_url"):
+            value = handle.get(key)
+            if isinstance(value, str) and value.startswith(("http://", "https://", "ws://", "wss://")):
+                return value
+        return ""
+
+    return lookup
+
+
 def build_app(settings: Settings | None = None, model: AgentModel | None = None) -> App:
     settings = settings or Settings.from_env()
     store = Store(settings.database_path)
     registry = build_registry(settings)
-    crews = CrewService(store, registry)
+    # keys are held here only when this node has custody of them; otherwise rows are
+    # written unsigned and say so, rather than pretending to attest.
+    signers = attest.KeyStore(store, mint=lambda: settings.comms_custody == "local")
+    crews = CrewService(store, registry, keys=signers)
     kanban = KanbanService(store)
     a2a = A2AService(store)
     runner = CrewRunner(store, registry, settings, model=model)
@@ -141,7 +178,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     departments = DepartmentService(store, kanban, a2a)
     pov = PovService(store, kanban, crews, channels=channels, departments=departments,
                      scheduler=scheduler)
-    audit = AuditService(store)
+    audit = AuditService(store, keys=signers)
     shifts = ShiftService(store, crews, kanban, channels=channels, a2a=a2a, audit=audit)
     profile = ProfileService(store, crews=crews, audit=audit)
     crews.profile = profile
@@ -156,6 +193,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit.record_event(event, context)
         return fired
 
+    # browser access: browser-use drives, kernel-images supplies a browser, both local.
+    browsers = browser_layer.build_service(store, crews=crews, settings=settings,
+                                           computer_cdp=_computer_cdp(crews))
     gates = GateService(store, audit=audit, secret=settings.gate_secret,
                         base_url=settings.public_base_url,
                         ttl_hours=settings.gate_ttl_hours, events_hook=emit)
@@ -175,8 +215,15 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     asks = AskService(store, crews, kanban, runner, channels=channels,
                       departments=departments, audit=audit, events_hook=emit)
     coordination = SqliteCoordination(store)
+    ops = build_ops(SimpleNamespace(kanban=kanban, channels=channels, scheduler=scheduler,
+                                   store=store, a2a=a2a))
+    checks = build_checks(SimpleNamespace(kanban=kanban, a2a=a2a, store=store))
+    sagas = SagaService(store, ops, events_hook=emit)
+    polls = PollService(store, checks, broker, events_hook=emit)
     vault = CredentialBroker(store, crews=crews, audit=audit, settings=settings)
 
+    worker.sagas = sagas
+    worker.polls = polls
     worker.brief = brief
     worker.shifts = shifts
     worker.gates = gates
@@ -224,4 +271,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         vault=vault,
         comms=comms,
         comms_gateway=comms_gateway,
+        sagas=sagas,
+        polls=polls,
+        browsers=browsers,
+        ops=ops,
+        checks=checks,
     )

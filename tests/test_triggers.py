@@ -143,7 +143,7 @@ class TemplateTests(unittest.TestCase):
 class CeleryConfigTests(unittest.TestCase):
     def test_beat_and_tasks_are_registered_when_celery_is_installed(self):
         try:
-            from clawcrew import jobs
+            from clawcrew.work.schedule import jobs
         except Exception:  # pragma: no cover - celery absent
             self.skipTest("celery is not installed in this environment")
         if jobs.celery is None:
@@ -151,10 +151,12 @@ class CeleryConfigTests(unittest.TestCase):
         schedule = jobs.celery.conf.beat_schedule
         self.assertIn("clawcrew-tick", schedule)
         self.assertIn("clawcrew-nightly", schedule)
-        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.jobs.tick")
-        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.jobs.nightly")
+        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.work.schedule.jobs.tick")
+        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.work.schedule.jobs.nightly")
         registered = set(jobs.celery.tasks)
-        for name in ("clawcrew.jobs.run_job", "clawcrew.jobs.tick", "clawcrew.jobs.fire_event"):
+        for name in ("clawcrew.work.schedule.jobs.run_job",
+                     "clawcrew.work.schedule.jobs.tick",
+                     "clawcrew.work.schedule.jobs.fire_event"):
             self.assertIn(name, registered)
 
 

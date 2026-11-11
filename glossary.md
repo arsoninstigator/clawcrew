@@ -16,6 +16,14 @@ ephemeral sandbox) and tools. three seed agents are enough to feel like a team: 
 researcher who cites, a writer who only writes from crew research, and an operator who
 ships.
 
+### agent id
+the principal an agent is known by, derived from its public key (`bech32`, `agent1...`),
+not stored as a claim beside it. an agent already had one keypair, the one that signs its
+room events; the agentid is that same key in a form you can read in a log. consequences
+worth knowing: an id cannot be assigned, renamed or transferred, `by_agentid` is a lookup
+rather than a lookup table, and `clawcrew principal <agent>` can say whether the key
+signing audit rows is still the key signing room events.
+
 ### ando
 the name in the original brief for a channel. a slack-shaped room inside a crew. the code
 calls it a `channel` and the table is `channels`, so the vocabulary stays one word, but
@@ -26,6 +34,25 @@ a workflow can be written by one or more agents (`POST /crews/{id}/workflows/pro
 it lands as `proposed` and is inert: `run` refuses it until a human calls `approve`.
 after that, `publish` binds a cron and the beat runs it. agents get authorship, humans
 keep the switch.
+
+### attestation
+the signed rendering of an agent's trail. every audit row is signed over its own hash by
+the agent's key, so the chain is attributable as well as tamper evident. `clawcrew attest
+<agent>` exports a bundle of rows, hashes, signatures and public keys that verifies with
+no database and no process (`clawcrew attest --verify bundle.json`), which is the
+difference between logs and proof: logs say what a system reported, attestation says what
+happened and who did it. a node without custody of the keys writes rows unsigned and
+reports them as unsigned rather than faking a signature.
+
+### browser
+an agent's browser access has two open source halves and no hosted dependency.
+`browser-use` (MIT) is the driver: it writes python against the chrome devtools protocol
+and attaches to a browser that already exists (usually the chrome inside the agent's
+computer) or launches a local chromium. `kernel-images` (Apache-2.0) is the browser for
+when you want one that cannot touch the agent's computer: chrome in a container with cdp
+on 9222, built and run locally. sessions are rows (`browser_sessions`) with an owner, a
+task and a scope, so a browser holding a login can be found and closed. scope follows
+persistence: `workspace` keeps the profile, `task_state` gets a temp directory.
 
 ### brief
 the night, as numbers. at the end of a shift window (18:00 to 06:00 by default) the
@@ -119,6 +146,13 @@ the cards and writes an audit row. `mode: sync` means the whole rotation works t
 together, so nobody has to accept; `mode: async` is one owner per slot with a real
 handoff.
 
+### persistence
+how much machine an agent keeps. `workspace` (the default) gives it a persistent
+computer: files, packages, downloads and its browser profile survive between tasks.
+`task_state` keeps only the task row and its steps, with the computer refused outright
+rather than handed over empty. a research crew whose output is synthesis does not need a
+disk, and a task asking for a persistent machine does not override the agent's setting.
+
 ### profile
 every agent carries its own namespaces: `skills`, `scope`, `memory`, `instructions`,
 `knowledge`, `perms`, `tools`, `vertical`, `spawn`, `connectors`. all of it is rows keyed
@@ -148,6 +182,20 @@ interval or five-field cron, durable, feeding the same job queue the api uses. `
 is idempotent; the queue claim is a single serialized update so two workers never take
 the same job.
 
+### specialization
+what an agent is for, in two halves: specializations (capabilities, e.g. search,
+synthesis) and verticals (the lines of work it serves, e.g. health, legal). both belong
+to the agent, not the crew, and neither is inherited by a spawn: a lane gets what you gave
+the lane. `set_specializations` changes them without touching anything else.
+
+### subagent id
+a lane's identity. when an agent fans work out, each lane gets its own keypair, its own
+`agentid` and a `subagent_id` derived from the parent's agentid, the task, the lane index
+and a nonce, and the parent signs the spawn row. a fan-in then proves which lane answered
+for which task at which position, and a lane cannot later claim it said something else:
+the collection is itself a signed row with a digest per lane. names are labels, ids are
+the identity.
+
 ### shift
 coverage, the way a shop floor does it: a rotation, a slot length and an arithmetic
 answer to "who is on the bar right now" (`slot_index = (now - anchor) // slot`, owner =
@@ -161,6 +209,12 @@ terraform targets for aws, gcp, azure and oracle are byoc, and `superserve` is t
 target whose runtime is somebody else's cloud, so it is opt in and driven only through
 their published sdk. `clawcrew get persistent|disposable` plans a target, and
 `--apply` is the only flag that creates anything.
+
+### team
+an agent's membership, not its cage. one home crew owns its name; it can work in as many
+others as you add it to, and listings put home agents first so name routing stays
+predictable. `agent_teams` stores the membership, so "who is in this crew" and "which
+crews is this agent in" are the same rows read in two directions.
 
 ### task
 a card. moving it is validated against a transition table, and every move writes an

@@ -83,6 +83,109 @@ status` prints exactly that.
 `docs/comms.md` is the long version: the wire, the kinds, custody, what a sync does, and
 what is deliberately not built.
 
+## what the range covers
+
+most agent tooling picks one verb and does it well. the point here is that one crew,
+under one org chart, covers a span of work from filing to building. the eight verbs are
+not features to tick off, they are the shapes of work an agent can hold:
+
+| verb | what it means here | where it lives |
+| --- | --- | --- |
+| create | bring an agent into being: from an argument, from a manifest, imported from another platform's format, or spawned as a lane under a parent | `crews.add_agent`, `import-agent`, `profile.spawn` |
+| curate | decide what the agent is for: role, skills, specializations, verticals, permissions, autonomy, whether it may spend or approve | agent scope, `profile` namespaces, `set_specializations` |
+| cultivate | let it grow: experience and expertise written back as profile rows, its own memory, its own computer or none | `profile.set`, persistence, `agents` |
+| collect | gather material: web reads, downloads, research lanes, kanban tasks, files on its own disk | tasks, runs, browser sessions, computers |
+| connect | reach people and systems: channels, a2a, handoffs, approval gates, connectors, scoped credential grants | `channels`, `a2a`, `gates`, `connectors`, `agent_vault` |
+| collaborate | work with peers: shared rooms, crews it belongs to, shared context, reviewed a2a, fan-out and fan-in | `comms`, `crews`, `profile.spawn_fan_out` |
+| coordinate | hold an org chart: departments, points of view, shifts, workflows, schedules, triggers | `departments`, `pov`, `shifts`, `workflows`, `schedule` |
+| construct | make the thing: code and documents on its computer, workflows, artifacts, a browser session that ends in a result | `work`, `workflows`, `browser` |
+
+an agent that only collects is a researcher. one that constructs is a builder. the same
+crew can hold both, on the same board, with the same audit trail, and a handoff between
+them is a row rather than a lost context window.
+
+## identity, and a trail you can check
+
+every agent has one keypair, and it already had one: the key that signs its room events.
+the `agentid` is derived from that public key (bech32, `agent1...`), which means it
+cannot be assigned, renamed, transferred or claimed by anyone who does not hold the key.
+there is no second identity to keep in step, and `clawcrew principal <agent>` reports the
+thing worth knowing: whether the key signing audit rows is still the same key signing
+room events.
+
+every audit row is signed over its own hash, so the chain is not just tamper evident, it
+is attributable. `clawcrew attest <agent>` exports a bundle that verifies with no
+database and no process:
+
+```
+clawcrew attest agent_abc > trail.json
+clawcrew attest --verify trail.json
+```
+
+logs tell you what a system reported. attestation tells you what actually happened, and
+who did it.
+
+a subagent is a principal too. when an agent fans work out, each lane gets a keypair, its
+own `agentid`, and a `subagent_id` derived from the parent's agentid, the task, the lane
+index and a nonce. the parent signs the spawn row. so a fan-in can prove which lane
+answered, for which task, at which position, and a lane cannot later claim it said
+something else. `spawn_fan_out` and `fan_in` are the two halves; the collection itself is
+a signed row with a digest per lane.
+
+## one agent, several crews
+
+crews are not a filing cabinet an agent is stuck inside. an agent has a home crew, which
+owns its name, and can work in as many others as you add it to. listings put home agents
+first, so name routing stays predictable. specializations (what it can do) and verticals
+(the lines of work it serves) belong to the agent, not to the crew, and are not inherited
+by a spawn: a lane gets what you gave the lane.
+
+## how much machine an agent gets
+
+persistence is a per-agent switch, because not every agent needs a filesystem.
+
+- `workspace` is the default. the agent gets a persistent computer: files, packages,
+  downloads, browser profile and installed tooling survive between tasks. this is what
+  makes "the writer remembers the brief it wrote last week" real rather than prompt
+  stuffing.
+- `task_state` keeps only the task row and its steps. no computer, no leftover browser,
+  no cookies from a page it read once. a research crew whose output is synthesis does not
+  need a disk, and refusing the computer outright is more honest than handing out an
+  empty one.
+
+a task asking for a persistent machine does not override this: persistence is the
+agent's setting, not the task's request.
+
+## browser access, open source on both sides
+
+the browser layer has two halves and neither of them needs an account, a key or a hosted
+service:
+
+- **browser-use** (MIT) is the driver. it writes python against the chrome devtools
+  protocol, and it hosts nothing: it attaches to a browser that already exists (the
+  chrome inside the agent's own computer) or launches a local chromium with its profile
+  directory.
+- **kernel-images** (Apache-2.0) is the browser, for when you want one that cannot touch
+  the agent's computer. it is chrome in a container with cdp on 9222, and it is the image
+  behind kernel.sh, which you build and run yourself:
+
+```
+git clone https://github.com/kernel/kernel-images
+cd kernel-images/images/chromium-headful && ./build-docker.sh && ./run-docker.sh
+export CLAWCREW_KERNEL_IMAGES_IMAGE=kernel-docker   # or CLAWCREW_KERNEL_CDP=ws://...
+```
+
+they compose: kernel-images gives a throwaway chrome, browser-use drives it. sessions are
+rows, not side effects, so a browser with a login in it is something you can find and
+close (`clawcrew browser list`, `clawcrew browser close`). their scope follows
+persistence: a `workspace` agent keeps its profile, a `task_state` agent gets a temp
+directory that goes away with the task.
+
+there is deliberately no cloud path. the library's own default in 1.0 is a hosted browser
+behind an api key; we never take it, and if the installed version cannot be given a local
+browser the error says which version to pin rather than quietly shipping the session
+somewhere else.
+
 ## getting it
 
 running instructions live in `get/`, one folder per entry point. each one says what
@@ -167,7 +270,7 @@ every knob is an env var (see `.env.example`).
 one process is enough for a small install: `uvicorn` for http, `clawcrew work` in a
 loop for the queue, `clawcrew tick` on a timer. to scale, point
 `CLAWCREW_BROKER=celery` at your existing cluster and run
-`celery -A clawcrew.jobs worker -Q clawcrew`. the sqlite queue stays the source of
+`celery -A clawcrew.work.schedule.jobs worker -Q clawcrew`. the sqlite queue stays the source of
 truth, so moving to celery changes who executes a job, never what a job means.
 
 ## tests
@@ -190,7 +293,7 @@ python -m clawcrew.cli serve
 ```
 
 last run (2026-11-11, from a `git clone` of the published repo, python 3.11): install
-clean, `make check` 391 tests OK, `/health`, `/providers`, `/services` answering, a crew
+clean, `make check` 533 tests OK, `/health`, `/providers`, `/services` answering, a crew
 created over http, `demo` completing a task through the review gate, and the merge that
 brought gates, the brief, connectors and brokered credentials onto one app. that run is also what caught a missing dependency:
 `python-dateutil` was imported by the vendored e2b client and never declared, so
@@ -200,7 +303,7 @@ that vm had no nested virtualization, so celesto's microVMs cannot boot there. t
 persistent-computer path needs a host with `/dev/kvm`; the build check says so
 instead of pretending.
 
-391 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
+533 tests, no network, no sleeps. they cover the sandbox lifecycles (both adapters
 against their real generated clients), the transition table, the a2a gate (pending
 must not reach an inbox) plus a2a schema conformance, cron math, queue claiming,
 workflow validation and gates, the n8n and dify importers, the n8n and dify
@@ -208,7 +311,11 @@ self-hosted clients and their workflow nodes, the celesto OSS CLI adapter, chann
 boards, department routing and escalation, the pov projection, the trigger engine and
 the celery beat, shift rotation and handoffs, the hash-chained audit trail, the a2a
 human rendering, agent-authored workflows with their approval gate, per-agent profile
-isolation and spawning, and the http surface including auth.
+isolation and spawning, agentids and signed attestations (including a tampered row and
+a forged signature), multi-crew membership, specializations, the persistence switch and
+its refusal to hand a task-state agent a computer, the browser layer with both lanes and
+a hosted provider being refused, subagent ids with fan-out and fan-in, sagas and polls as
+job kinds, and the six agent import formats, plus the http surface including auth.
 
 ## honest limits
 

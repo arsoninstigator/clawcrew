@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
 
 SCHEMA = """
 create table if not exists meta (
@@ -52,6 +52,19 @@ create table if not exists agents (
     updated_date real not null,
     unique (team_id, name)
 );
+
+-- an agent can work in more than one crew. `team_id` on the agent stays its home
+-- crew (where its name is unique); this table is the membership, home included, so
+-- "who is in this crew" is one query and nothing is implied by a nullable column.
+create table if not exists agent_teams (
+    agent_id text not null references agents(id) on delete cascade,
+    team_id text not null references teams(id) on delete cascade,
+    role text not null default '',
+    membership text not null default 'member',
+    joined_date real not null,
+    primary key (agent_id, team_id)
+);
+create index if not exists agent_teams_team on agent_teams (team_id);
 
 create table if not exists computers (
     id text primary key,
@@ -526,6 +539,90 @@ create table if not exists comms_bridges (
     last_error text not null default '',
     primary key (room_id, transport)
 );
+-- a saga: steps in order, each with an undo, reversed when a later step fails.
+create table if not exists sagas (
+    id text primary key,
+    team_id text not null,
+    name text not null default '',
+    status text not null default 'draft',
+    steps text not null default '[]',
+    context text not null default '{}',
+    error text not null default '',
+    created_date real not null,
+    updated_date real not null,
+    finished_date real
+);
+create index if not exists sagas_team on sagas (team_id, status);
+
+create table if not exists saga_steps (
+    id text primary key,
+    saga_id text not null references sagas(id) on delete cascade,
+    position integer not null,
+    name text not null,
+    status text not null default 'pending',
+    result text not null default '{}',
+    undo_result text not null default '{}',
+    error text not null default '',
+    started_date real,
+    finished_date real,
+    unique (saga_id, position)
+);
+create index if not exists saga_steps_saga on saga_steps (saga_id, position);
+
+-- a poll: check an external fact on a schedule until a rule says stop.
+create table if not exists polls (
+    id text primary key,
+    team_id text not null,
+    name text not null default '',
+    check_op text not null,
+    check_args text not null default '{}',
+    until text not null default '{}',
+    interval real not null default 60,
+    max_interval real not null default 3600,
+    backoff real not null default 1.0,
+    max_attempts integer not null default 20,
+    deadline real,
+    on_satisfy text not null default '',
+    on_expire text not null default '',
+    status text not null default 'waiting',
+    attempts integer not null default 0,
+    next_at real,
+    last_result text not null default '{}',
+    created_date real not null,
+    updated_date real not null,
+    finished_date real
+);
+create index if not exists polls_team on polls (team_id, status);
+
+-- one row per browser an agent has been given: which provider, whose task, and
+-- whether the profile survives. a browser nobody can find is a login nobody can revoke.
+create table if not exists browser_sessions (
+    id text primary key,
+    team_id text not null default '',
+    agent_id text not null,
+    task_id text not null default '',
+    provider text not null,
+    scope text not null default 'task',
+    state text not null default 'ready',
+    cdp_url text not null default '',
+    live_url text not null default '',
+    profile_dir text not null default '',
+    handle text not null default '{}',
+    created_date real not null,
+    closed_date real
+);
+create index if not exists browser_sessions_agent on browser_sessions (agent_id, state);
+
+create table if not exists poll_attempts (
+    id text primary key,
+    poll_id text not null references polls(id) on delete cascade,
+    attempt integer not null,
+    status text not null,
+    result text not null default '{}',
+    error text not null default '',
+    created_date real not null,
+    unique (poll_id, attempt)
+);
 """
 
 
@@ -574,6 +671,24 @@ class Store:
             "agents": {
                 "agent_key": "text",
                 "scope": "text not null default '{}'",
+                # the principal: bech32 of sha256(pubkey). set once, signed, never moved
+                "agentid": "text",
+                # what the agent is good at, and the lines of work it serves
+                "specializations": "text not null default '[]'",
+                "verticals": "text not null default '[]'",
+            },
+            # a spawn is a principal with a parent, and a lane in a fan-out
+            "agent_spawns": {
+                "subagent_id": "text",
+                "parent_agentid": "text",
+                "fan_out": "integer not null default 0",
+                "nonce": "text",
+            },
+            # signatures on the provenance chain
+            "agent_audit": {
+                "signer": "text not null default ''",
+                "pubkey": "text not null default ''",
+                "sig": "text not null default ''",
             },
             # a workflow is inert until its status says otherwise
             "workflows": {
@@ -590,6 +705,18 @@ class Store:
                     c.execute(f"alter table {table} add column {name} {decl}")
         c.execute("create index if not exists tasks_channel on tasks (channel_id, column_name)")
         c.execute("create unique index if not exists agents_key on agents (agent_key)")
+        c.execute("create unique index if not exists agents_agentid on agents (agentid)")
+        c.execute("create unique index if not exists agent_spawns_subagent "
+                  "on agent_spawns (subagent_id)")
+        self._backfill_memberships(c)
+
+    def _backfill_memberships(self, c: sqlite3.Connection) -> None:
+        """every agent that predates multi-crew membership gets its home row, so the
+        membership table is the answer to "who is in this crew" from the first boot."""
+        c.execute(
+            """insert or ignore into agent_teams (agent_id, team_id, role, membership, joined_date)
+               select id, team_id, role, 'home', created_date from agents"""
+        )
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:

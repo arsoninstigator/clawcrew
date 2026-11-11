@@ -10,6 +10,8 @@ groups:
   /a2a          message send, review queue, review decisions, inbox, log
   /workflows    dag save/validate/run/resume
   /schedules    interval and cron schedules
+  /sagas        a step sequence with defined undos, rolled back in reverse
+  /polls        check an external system on an interval until a rule stops it
   /channels     rooms, each with its own board and conversation
   /departments  the org chart, coordinator routing, escalation
   /pov          the workspace as one agent sees it (board, calendar, inbox)
@@ -19,6 +21,7 @@ groups:
   /ui/pov       the served point-of-view switcher
   /profile      per-agent skills, scope, memory, perms, tools, vertical, spawn policy
   /ops          health, providers, queue tick, worker drain, counts
+  /imports      read an agent from another tool's format, and export one back
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import a2a_human
 from . import a2a_protocol as a2a_spec
+from .agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from .app import App, build_app
 from .comms import Event
 from .errors import ClawCrewError, NotFound, ValidationError
@@ -131,11 +135,119 @@ def create_api(app: App | None = None) -> FastAPI:
             skills=data.get("skills") or [],
             tools=data.get("tools") or [],
             runtime=data.get("runtime"),
+            teams=data.get("teams") or [],
+            specializations=data.get("specializations") or [],
+            verticals=data.get("verticals") or [],
+            persistence=data.get("persistence"),
         )
 
     @api.get("/crews/{team_id}/agents")
-    def list_agents(team_id: str) -> dict:
-        return {"agents": app.crews.list_agents(team_id)}
+    def list_agents(team_id: str, include_members: bool = Query(True)) -> dict:
+        return {"agents": app.crews.list_agents(team_id, include_members=include_members)}
+
+    # ---- identity, teams, specializations, persistence -----------------
+    @api.get("/agents/{agent_id}/teams")
+    def agent_teams(agent_id: str) -> dict:
+        return {"agent_id": agent_id, "teams": app.crews.teams_of(agent_id)}
+
+    @api.post("/crews/{team_id}/agents/{agent_id}")
+    def join_crew(team_id: str, agent_id: str, payload: dict = Body(default={})) -> dict:
+        return app.crews.join_team(agent_id, team_id, role=body(payload or {}).get("role", ""))
+
+    @api.delete("/crews/{team_id}/agents/{agent_id}")
+    def leave_crew(team_id: str, agent_id: str) -> dict:
+        return app.crews.leave_team(agent_id, team_id)
+
+    @api.post("/agents/{agent_id}/specializations")
+    def set_specializations(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.crews.set_specializations(
+            agent_id, specializations=data.get("specializations"), verticals=data.get("verticals")
+        )
+
+    @api.post("/agents/{agent_id}/persistence")
+    def set_persistence(agent_id: str, payload: dict = Body(...)) -> dict:
+        return app.crews.set_persistence(agent_id, body(payload).get("mode", ""))
+
+    @api.get("/agents/by-agentid/{agentid}")
+    def agent_by_agentid(agentid: str) -> dict:
+        return app.crews.by_agentid(agentid)
+
+    @api.get("/agents/{agent_id}/principal")
+    def agent_principal(agent_id: str) -> dict:
+        """the agent seen from both sides: the key that signs room events and the key
+        that signs audit rows, and whether they are still the same one."""
+        principal = app.audit.paired(agent_id)
+        principal["agent"] = {
+            k: app.crews.get_agent(agent_id)[k]
+            for k in ("id", "name", "role", "agent_key", "agentid", "teams", "persistence",
+                      "specializations", "verticals")
+        }
+        return principal
+
+    # ---- attestation ---------------------------------------------------
+    @api.get("/agents/{agent_id}/attestation")
+    def agent_attestation(agent_id: str) -> dict:
+        return app.audit.export(agent_id)
+
+    @api.post("/attestations/verify")
+    def verify_attestation(payload: dict = Body(...)) -> dict:
+        from . import attest
+
+        bundle = body(payload if isinstance(payload, dict) else {})
+        entries = bundle.get("entries") or []
+        return attest.verify_entries(entries)
+
+    @api.get("/workflows/{workflow_id}/attestation")
+    def workflow_attestation(workflow_id: str) -> dict:
+        return app.audit.workflow_attestation(workflow_id)
+
+    # ---- spawning ------------------------------------------------------
+    @api.post("/agents/{agent_id}/spawn")
+    def spawn_subagent(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if data.get("lanes"):
+            return app.profile.spawn_fan_out(
+                agent_id, list(data["lanes"]), task_id=data.get("task_id"),
+                role=data.get("role", ""), vertical=data.get("vertical"),
+                persistence=data.get("persistence"),
+            )
+        return app.profile.spawn(
+            agent_id, data.get("name", ""), role=data.get("role", ""), task_id=data.get("task_id"),
+            vertical=data.get("vertical"), index=int(data.get("index") or 0),
+            specializations=data.get("specializations"),
+            persistence=data.get("persistence"),
+        )
+
+    @api.post("/agents/{agent_id}/fan-in")
+    def fan_in(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.profile.fan_in(agent_id, data.get("task_id", ""), data.get("results") or {})
+
+    # ---- browser -------------------------------------------------------
+    @api.get("/browser/providers")
+    def browser_providers() -> dict:
+        return {"providers": app.browsers.status()}
+
+    @api.post("/agents/{agent_id}/browser")
+    def open_browser(agent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.browsers.open(agent_id, data.get("spec") or {}, scope=data.get("scope"),
+                                 task_id=data.get("task_id"))
+
+    @api.get("/agents/{agent_id}/browser")
+    def list_browsers(agent_id: str, state: str | None = None) -> dict:
+        return {"sessions": app.browsers.list(agent_id, state=state)}
+
+    @api.delete("/browser/sessions/{session_id}")
+    def close_browser(session_id: str) -> dict:
+        return app.browsers.close(session_id)
+
+    @api.post("/agents/{agent_id}/browser/run")
+    def run_browser(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.browsers.run(agent_id, data.get("task", ""), spec=data.get("spec") or {},
+                                task_id=data.get("task_id"), session_id=data.get("session_id"))
 
     @api.post("/agents/{agent_id}/computer")
     def ensure_computer(agent_id: str, payload: dict = Body(default={})) -> dict:
@@ -853,6 +965,105 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/crews/{team_id}/schedules")
     def list_schedules(team_id: str) -> dict:
         return {"schedules": app.scheduler.list(team_id)}
+
+    # ---- imports: an agent does not have to be born here ---------------
+    @api.get("/imports/agents/formats")
+    def agent_formats() -> dict:
+        return {"formats": AGENT_SOURCES}
+
+    @api.post("/crews/{team_id}/agents/import")
+    def import_agent_route(team_id: str, payload: dict = Body(...)) -> dict:
+        """`source` is a path, a url, the content itself, or a json object. the format
+        is detected unless it is named, and `dry_run` returns the manifest."""
+        data = body(payload)
+        ref = data.get("source")
+        if ref is None and data.get("content") is not None:
+            ref = data["content"]
+        if ref is None and data.get("url"):
+            ref = data["url"]
+        if ref is None:
+            raise ValidationError("give a source, a url or content to import")
+        manifest = import_agent(ref, source=data.get("format") or "",
+                               agent_name=data.get("entry") or "")
+        if data.get("dry_run"):
+            return {"manifest": manifest.to_dict(), "imported": False}
+        return adopt(app, team_id, manifest, name=data.get("name") or "")
+
+    @api.get("/agents/{agent_id}/export")
+    def export_agent_route(agent_id: str) -> dict:
+        agent = app.crews.get_agent(agent_id)
+        profile = app.profile.profile(agent_id) if app.profile is not None else {}
+        return export_agent(agent, profile)
+
+    # ---- sagas: a sequence with a way back ---------------------------
+    @api.post("/crews/{team_id}/sagas")
+    def create_saga(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        saga = app.sagas.create(team_id, data.get("name", "saga"),
+                                data.get("steps") or [], context=data.get("context") or {})
+        if data.get("run", True):
+            app.scheduler.broker.enqueue("saga", {"saga_id": saga["id"]})
+        return saga
+
+    @api.get("/crews/{team_id}/sagas")
+    def list_sagas(team_id: str, status: str = "") -> dict:
+        return {"sagas": app.sagas.list(team_id, status=status)}
+
+    @api.get("/sagas/{saga_id}")
+    def get_saga(saga_id: str) -> dict:
+        return app.sagas.get(saga_id)
+
+    @api.post("/sagas/{saga_id}/run")
+    def run_saga(saga_id: str) -> dict:
+        saga = app.sagas.get(saga_id)
+        job = app.scheduler.broker.enqueue("saga", {"saga_id": saga["id"]})
+        return {"saga": saga["id"], "status": saga["status"], "job_id": job}
+
+    @api.post("/sagas/{saga_id}/retry")
+    def retry_saga(saga_id: str) -> dict:
+        job = app.scheduler.broker.enqueue("saga", {"saga_id": saga_id})
+        app.sagas.retry_failed(saga_id)
+        return {"saga": saga_id, "job_id": job}
+
+    @api.get("/ops")
+    def list_ops() -> dict:
+        return {"ops": app.ops.names(), "checks": app.checks.names()}
+
+    # ---- polls: wait for the world -------------------------------------
+    @api.post("/crews/{team_id}/polls")
+    def start_poll(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.polls.start(
+            team_id=team_id,
+            name=data.get("name", ""),
+            check=data.get("check", ""),
+            check_args=data.get("check_args") or {},
+            until=data.get("until") or {},
+            interval=float(data.get("interval", 60)),
+            max_interval=float(data.get("max_interval", 3600)),
+            backoff=float(data.get("backoff", 1.5)),
+            max_attempts=int(data.get("max_attempts", 20)),
+            deadline=data.get("deadline"),
+            on_satisfy=data.get("on_satisfy") or {},
+            on_expire=data.get("on_expire") or {},
+            jitter=float(data.get("jitter", 0.0)),
+            first_delay=float(data.get("first_delay", 0.0)),
+        )
+
+    @api.get("/crews/{team_id}/polls")
+    def list_polls(team_id: str, status: str = "") -> dict:
+        return {"polls": app.polls.list(team_id, status=status)}
+
+    @api.get("/polls/{poll_id}")
+    def get_poll(poll_id: str) -> dict:
+        poll = app.polls.get(poll_id)
+        poll["attempts_log"] = app.polls.attempts(poll_id)
+        return poll
+
+    @api.post("/polls/{poll_id}/cancel")
+    def cancel_poll(poll_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.polls.cancel(poll_id, reason=data.get("reason", "cancelled by a human"))
 
     # ---- a2a protocol interop -----------------------------------------
     @api.get("/agents/{agent_id}/card")

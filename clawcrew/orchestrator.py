@@ -214,8 +214,17 @@ class CrewRunner:
 
     # ---- sandbox -------------------------------------------------------
     def _sandbox(self, agent: dict, task: dict) -> tuple[Any, Handle]:
+        """which machine this run gets.
+
+        persistence decides, not the task: an agent configured for `task_state` never
+        gets a computer, even for a task that asked to be persistent, because the whole
+        point of that setting is that nothing survives the run. it gets a throwaway
+        sandbox keyed to the task instead, so the work still happens and still leaves
+        nothing behind.
+        """
         runtime = agent["runtime"] or {}
-        if task["isolation"] == "ephemeral":
+        task_state = (agent.get("persistence") or "workspace") == "task_state"
+        if task["isolation"] == "ephemeral" or task_state:
             provider = self.registry.get("ephemeral")
             spec = {
                 "kind": "ephemeral",

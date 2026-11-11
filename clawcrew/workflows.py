@@ -560,9 +560,17 @@ class WorkflowService:
         agent = next((a for a in agents if a["name"] == agent_name or a["id"] == agent_name), None)
         if agent is None:
             return {"status": "failed", "error": f"shell node needs a valid agent, got '{agent_name}'"}
-        computer = self.crews.ensure_computer(agent["id"])
-        provider = self.runner.registry.get(computer["provider"])
-        handle = Handle.from_dict(computer["handle"])
+        if (agent.get("persistence") or "workspace") == "task_state":
+            # no computer to shell into. run it in a throwaway sandbox for this node
+            # rather than refusing the workflow: the command is the work, the machine
+            # is an implementation detail.
+            provider = self.runner.registry.get("ephemeral")
+            spec = {"kind": "ephemeral", "ttl_seconds": int(node.get("timeout", 300)) + 60}
+            handle = provider.ensure(f"wf-{workflow['id']}-{node['id']}", spec)
+        else:
+            computer = self.crews.ensure_computer(agent["id"])
+            provider = self.runner.registry.get(computer["provider"])
+            handle = Handle.from_dict(computer["handle"])
         command = self._render(node["command"], state) or ""
         outcome = provider.exec(handle, command, timeout=int(node.get("timeout", 300)))
         state["outputs"][node["id"]] = outcome.stdout

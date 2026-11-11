@@ -79,6 +79,14 @@ class Settings:
     # "local" means this node mints and holds each agent's key; "external" means
     # only public halves are stored and signing happens elsewhere (not built).
     comms_custody: str = "local"
+
+    # browser access: open source driver, self-hosted browser, no account and no key.
+    # `browser-use` (mit) drives any cdp endpoint; `kernel-images` (apache-2.0) runs
+    # chrome in a local container; `none` gives an agent no browser at all.
+    browser_provider: str = "browser-use"
+    browser_profile_root: str = ""
+    kernel_images_image: str = ""
+    kernel_cdp_url: str = ""
     # this build makes agents the only first class members of a room; people can
     # be enabled, and nothing else about the log changes when they are
     comms_humans_enabled: bool = False
@@ -136,6 +144,10 @@ class Settings:
             vault_proxy_url=_env(env, "AGENT_VAULT_PROXY_URL"),
             vault_ttl_hours=float(_env(env, "AGENT_VAULT_TTL_HOURS", "24") or 24),
             comms_custody=_env(env, "CLAWCREW_COMMS_CUSTODY", "local").lower(),
+            browser_provider=_env(env, "CLAWCREW_BROWSER_PROVIDER", "browser-use").lower(),
+            browser_profile_root=_env(env, "CLAWCREW_BROWSER_PROFILE_ROOT"),
+            kernel_images_image=_env(env, "CLAWCREW_KERNEL_IMAGES_IMAGE"),
+            kernel_cdp_url=_env(env, "CLAWCREW_KERNEL_CDP"),
             comms_humans_enabled=_flag(env, "CLAWCREW_COMMS_HUMANS", False),
             comms_relay=_env(env, "CLAWCREW_COMMS_RELAY"),
             comms_relay_transport=_env(env, "CLAWCREW_COMMS_RELAY_TRANSPORT", "nostr").lower(),

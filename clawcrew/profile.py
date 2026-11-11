@@ -37,6 +37,7 @@ import hashlib
 import json
 from typing import Any
 
+from . import attest
 from .db import Store, dumps, loads, new_id, now
 from .errors import Conflict, NotAllowed, NotFound, ValidationError
 
@@ -444,8 +445,18 @@ class ProfileService:
         mode: str | None = None,
         task_id: str | None = None,
         vertical: str | None = None,
+        index: int = 0,
+        nonce: str = "",
+        specializations: list[str] | None = None,
+        persistence: str | None = None,
     ) -> dict:
-        """a child agent, with a profile of its own and none of the parent's access."""
+        """a child agent, with a profile of its own and none of the parent's access.
+
+        the child is a principal in its own right: it gets a keypair, an `agentid`, and
+        a `subagent_id` derived from the parent's agentid, this task, its fan-out lane
+        and a nonce. the parent signs the spawn row, which is what makes "this lane was
+        that parent's, for that task, at that position" checkable instead of asserted.
+        """
         if self.crews is None:
             raise ValidationError("spawning needs the crew service")
         parent = self.crews.get_agent(parent_agent_id)
@@ -480,6 +491,10 @@ class ProfileService:
                 "instructions": f"subagent of {parent['name']}",
                 "data_scope": "agent",
             },
+            specializations=specializations or [],
+            # a lane inherits the persistence it was spawned into, not the parent's whole
+            # working life: research lanes should not each get a filesystem.
+            persistence=persistence or parent.get("persistence", "workspace"),
         )
         parent_vertical = ((self.profile(parent_agent_id)["namespaces"].get("vertical") or {})
                           .get("primary") or {})
@@ -491,30 +506,136 @@ class ProfileService:
         )
         for key, value in SPAWN_DEFAULTS.items():
             self.set(child["id"], "spawn", key, value, origin="system")
+        parent_identity = self.crews.mint_identity(parent_agent_id)
+        lane_nonce = nonce or new_id("n")
+        subagent_id = ""
+        if parent_identity["agentid"]:
+            subagent_id = attest.subagent_id(
+                parent_identity["agentid"], task_id or "", int(index), lane_nonce
+            )
         spawn_id = new_id("spawn")
         with self.store.tx() as c:
             c.execute(
                 """insert into agent_spawns
-                   (id, team_id, parent_agent_id, child_agent_id, mode, task_id, status, created_date)
-                   values (?,?,?,?,?,?, 'active', ?)""",
-                (spawn_id, parent["team_id"], parent_agent_id, child["id"], chosen, task_id, now()),
+                   (id, team_id, parent_agent_id, child_agent_id, mode, task_id, status,
+                    subagent_id, parent_agentid, fan_out, nonce, created_date)
+                   values (?,?,?,?,?,?, 'active', ?,?,?,?,?)""",
+                (spawn_id, parent["team_id"], parent_agent_id, child["id"], chosen, task_id,
+                 subagent_id, parent_identity["agentid"], int(index), lane_nonce, now()),
             )
         if self.audit is not None:
             self.audit.record(
                 team_id=parent["team_id"],
                 agent_id=parent_agent_id,
-                action="agent.spawned",
-                target_kind="agent",
-                target_id=child["id"],
-                payload={"spawn_id": spawn_id, "mode": chosen, "task_id": task_id, "name": name},
+                action="subagent.spawned",
+                actor_kind="agent",
+                actor_id=parent_agent_id,
+                target_kind="subagent",
+                target_id=subagent_id or child["id"],
+                payload={
+                    "spawn_id": spawn_id,
+                    "mode": chosen,
+                    "task_id": task_id or "",
+                    "name": name,
+                    "subagent_id": subagent_id,
+                    "child_agent_id": child["id"],
+                    "child_agentid": self.crews.mint_identity(child["id"])["agentid"],
+                    "parent_agentid": parent_identity["agentid"],
+                    "fan_out": int(index),
+                    "nonce": lane_nonce,
+                },
             )
         return {
             "spawn_id": spawn_id,
             "parent_agent_id": parent_agent_id,
+            "parent_agentid": parent_identity["agentid"],
+            "subagent_id": subagent_id,
+            "fan_out": int(index),
             "child": self.crews.get_agent(child["id"]),
             "mode": chosen,
             "task_id": task_id,
             "status": "active",
+        }
+
+    def spawn_fan_out(
+        self,
+        parent_agent_id: str,
+        names: list[str],
+        task_id: str | None = None,
+        role: str = "",
+        mode: str | None = None,
+        vertical: str | None = None,
+        persistence: str | None = None,
+    ) -> dict:
+        """one task, several lanes, each a signed subagent id.
+
+        the lanes are numbered, so a fan-in can name the lane that answered and prove
+        the lane was this parent's, for this task, at that index. a lane that fails does
+        not take the others with it: its own record says so.
+        """
+        if not names:
+            raise ValidationError("fan-out needs at least one lane")
+        lanes = [
+            self.spawn(parent_agent_id, name, role=role, mode=mode, task_id=task_id,
+                       vertical=vertical, index=position, persistence=persistence)
+            for position, name in enumerate(names)
+        ]
+        return {
+            "parent_agent_id": parent_agent_id,
+            "task_id": task_id,
+            "lanes": lanes,
+            "subagent_ids": [lane["subagent_id"] for lane in lanes],
+        }
+
+    def fan_in(self, parent_agent_id: str, task_id: str, results: dict | None = None) -> dict:
+        """collect the lanes of one task, and sign the collection.
+
+        the parent attests which subagent ids reported and a digest of each result, so
+        the merge is attributable and a lane cannot later claim it said something else.
+        results are matched by subagent id, never by name: names are labels.
+        """
+        rows = self.store.query(
+            "select * from agent_spawns where parent_agent_id = ? and task_id = ? order by fan_out",
+            (parent_agent_id, task_id),
+        )
+        lanes = []
+        for row in rows:
+            sid = row["subagent_id"] if "subagent_id" in row.keys() else ""
+            reported = None if results is None else (sid in results)
+            lanes.append({
+                "spawn_id": row["id"],
+                "subagent_id": sid,
+                "child_agent_id": row["child_agent_id"],
+                "fan_out": row["fan_out"] if "fan_out" in row.keys() else 0,
+                "status": row["status"],
+                "reported": reported,
+                "result_digest": (
+                    hashlib.sha256(attest.canonical(results[sid]).encode()).hexdigest()
+                    if reported else ""
+                ),
+            })
+        missing = [lane["subagent_id"] for lane in lanes if lane["reported"] is False]
+        merged = [lane["subagent_id"] for lane in lanes if lane["reported"]]
+        if self.audit is not None:
+            parent = self.crews.get_agent(parent_agent_id) if self.crews else {"team_id": ""}
+            self.audit.record(
+                team_id=parent["team_id"],
+                agent_id=parent_agent_id,
+                action="subagent.fan_in",
+                actor_kind="agent",
+                actor_id=parent_agent_id,
+                target_kind="task",
+                target_id=task_id,
+                payload={"lanes": len(lanes), "merged": merged, "missing": missing,
+                         "lanes_detail": lanes},
+            )
+        return {
+            "parent_agent_id": parent_agent_id,
+            "task_id": task_id,
+            "lanes": lanes,
+            "lane_count": len(lanes),
+            "merged": merged,
+            "missing": missing,
         }
 
     def children(self, agent_id: str, include_retired: bool = False) -> list[dict]:
@@ -536,6 +657,8 @@ class ProfileService:
                     "child_agent_id": row["child_agent_id"],
                     "name": child["name"],
                     "agent_key": child.get("agent_key", ""),
+                    "subagent_id": row["subagent_id"] if "subagent_id" in row.keys() else "",
+                    "fan_out": row["fan_out"] if "fan_out" in row.keys() else 0,
                     "mode": row["mode"],
                     "task_id": row["task_id"],
                     "status": row["status"],
@@ -562,6 +685,7 @@ class ProfileService:
                     "spawn_id": row["id"],
                     "parent_agent_id": row["parent_agent_id"],
                     "child_agent_id": row["child_agent_id"],
+                    "subagent_id": row["subagent_id"] if "subagent_id" in row.keys() else "",
                     "mode": row["mode"],
                     "created_date": row["created_date"],
                 }

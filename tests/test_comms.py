@@ -149,11 +149,19 @@ class IdentityTests(AvatarCase):
         self.assertNotEqual(a["pubkey"], b["pubkey"])
 
     def test_external_custody_refuses_to_mint(self) -> None:
-        self.app.comms.settings = Settings(
-            database_path=self.settings.database_path, comms_custody="external"
-        )
+        # a key that already exists stays readable: it is the operator's key, not ours
+        # to delete. what an external-custody node must never do is mint a new one.
+        # flip it on the settings object the app was built with: custody is read live,
+        # so one switch moves comms and the audit trail together.
+        self.app.settings.comms_custody = "external"
+        exists = self.app.comms.identity(self.writer["id"])
+        self.assertTrue(exists["pubkey"])
+        fresh = self.crews.add_agent(self.team["id"], "no-key-yet")
+        with self.app.store.tx() as c:
+            c.execute("delete from comms_identities where agent_id = ?", (fresh["id"],))
+        self.assertEqual(self.app.crews.mint_identity(fresh["id"])["agentid"], "")
         with self.assertRaises(ProviderNotConfigured):
-            self.app.comms.identity(self.writer["id"])
+            self.app.comms.identity(fresh["id"])
 
     def test_missing_agent_is_404(self) -> None:
         with self.assertRaises(NotFound):
