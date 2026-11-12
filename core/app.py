@@ -223,6 +223,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     sagas = SagaService(store, ops, events_hook=emit)
     polls = PollService(store, checks, broker, events_hook=emit)
     vault = CredentialBroker(store, crews=crews, audit=audit, settings=settings)
+    # one direction only: crews ask the broker for env, the broker never asks crews
+    crews.vault = vault
 
     worker.sagas = sagas
     worker.polls = polls

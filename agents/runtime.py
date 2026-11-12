@@ -15,6 +15,7 @@ that echoes free text cannot be scheduled or reviewed:
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -30,6 +31,35 @@ ACTION_SCHEMA = """respond with a single json object, no prose outside it:
  "done": false,
  "result": {}}
 at most 3 commands per turn. set done=true only when the task is finished."""
+
+
+SANDBOX_ENV_PATH = "/agents/{agent_id}/sandbox-env"
+
+
+def pull_env(base_url: str, agent_id: str, token: str = "", timeout: int = 10,
+             apply: bool = True) -> dict:
+    """fetch the env the platform holds for this agent, at boot.
+
+    a computer's create request has no env field, so this is how a proxied credential
+    reaches the harness: over the authenticated channel, into this process's
+    environment. the return value carries names and a count, never values, because
+    anything returned here tends to end up in a run row.
+    """
+    if not base_url:
+        return {"loaded": 0, "names": [], "skipped": "no platform url"}
+    url = base_url.rstrip("/") + SANDBOX_ENV_PATH.format(agent_id=agent_id)
+    try:
+        payload = request_json(
+            "GET", url,
+            headers={"authorization": f"Bearer {token}"} if token else {},
+            timeout=timeout,
+        )
+    except Exception as exc:  # a boot must not depend on the broker being reachable
+        return {"loaded": 0, "names": [], "error": str(exc)[:200]}
+    env = {k: v for k, v in ((payload or {}).get("env") or {}).items() if isinstance(v, str)}
+    if apply:
+        os.environ.update(env)
+    return {"loaded": len(env), "names": sorted(env)}
 
 
 class AgentModel(Protocol):

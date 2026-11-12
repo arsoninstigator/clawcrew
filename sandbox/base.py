@@ -8,16 +8,50 @@ two lifecycles matter for crittertown:
   backed by ephemeral.
 
 both satisfy `SandboxProvider`, so orchestration code never branches on vendor.
-`spec` is a free-form dict (`image`, `template`, `ttl_seconds`, `env`, ...) that
-the adapter translates.
+`spec` is a free-form dict (`image`, `template`, `ttl_seconds`, ...) that the adapter
+translates.
+
+`env` is the one argument that is not free-form. it carries credentials, so it crosses
+this interface explicitly rather than riding along in `spec` where anything could add
+to it:
+
+* a provider whose create request has an env field (`delivers_env = True`, the default)
+  is handed the values at creation, and they never touch a row, a response or a log
+* a provider whose create request has no such field (`delivers_env = False`: persistent
+  computers, whose create schema has no env, and hosted, whose sdk surface is theirs)
+  is handed nothing. its harness pulls the same values from the platform over the
+  authenticated channel at boot, so a secret never sits in an exec command line or on
+  the machine's disk
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 from core.errors import ProviderFailure, ProviderNotConfigured, ValidationError
+
+
+# a name a provider may be handed. strict on purpose: `=` or a newline in a name or a
+# value is how one variable becomes two, and this argument is where credentials arrive.
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def clean_env(env: Mapping[str, str] | None) -> dict[str, str]:
+    """validate the env a sandbox is handed, and never trust the caller's dict."""
+    if not env:
+        return {}
+    out: dict[str, str] = {}
+    for name, value in dict(env).items():
+        if not isinstance(name, str) or not _ENV_NAME.match(name):
+            raise ValidationError(f"invalid env var name: {name!r}")
+        if not isinstance(value, str):
+            raise ValidationError(f"env var {name} must be a string")
+        if any(ch in value for ch in ("\n", "\r", "\0")):
+            raise ValidationError(f"env var {name} contains a newline or NUL")
+        out[name] = value
+    return out
 
 
 @dataclass
@@ -76,7 +110,8 @@ class SandboxProvider(Protocol):
 
     def configured(self) -> bool: ...
 
-    def ensure(self, key: str, spec: dict) -> Handle: ...
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle: ...
 
     def exec(self, handle: Handle, command: str, timeout: int = 300) -> ExecResult: ...
 
@@ -90,6 +125,9 @@ class SandboxProvider(Protocol):
 class BaseProvider:
     name = "base"
     kind = "ephemeral"
+    # does this provider's create request take env? if not, the platform delivers the
+    # same values to the harness at boot instead. see the module docstring.
+    delivers_env = True
 
     def configured(self) -> bool:  # overridden
         return False
@@ -101,7 +139,8 @@ class BaseProvider:
                 provider=self.name,
             )
 
-    def ensure(self, key: str, spec: dict) -> Handle:  # pragma: no cover - interface
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle:  # pragma: no cover
         raise NotImplementedError
 
     def exec(self, handle: Handle, command: str, timeout: int = 300) -> ExecResult:

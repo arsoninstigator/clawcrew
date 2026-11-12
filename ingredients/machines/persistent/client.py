@@ -31,7 +31,7 @@ compile a computer from the agent's `runtime` dict: `size_id`, `vcpus`, `ram_mb`
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 
@@ -52,7 +52,7 @@ from vendor.persistent_cloud_api.models.computer_list_response import ComputerLi
 from vendor.persistent_cloud_api.models.computer_response import ComputerResponse
 from vendor.persistent_cloud_api.models.network_policy import NetworkPolicy
 from vendor.persistent_cloud_api.models.network_policy_mode import NetworkPolicyMode
-from sandbox.base import BaseProvider, ExecResult, Handle
+from sandbox.base import BaseProvider, ExecResult, Handle, clean_env
 from sandbox.transport import DEFAULT_PERSISTENT_BASE, call, persistent_client, field, guard, unwrap
 
 # fields accepted by ComputerCreateRequest, in the order a runtime dict sets them
@@ -72,6 +72,8 @@ DEAD_STATUSES = {"error", "lost", "deleted"}
 
 
 class PersistentProvider(BaseProvider):
+    # a computer's create request has no env field; the harness pulls it at boot
+    delivers_env = False
     name = "persistent"
     kind = "persistent"
     isolated = True
@@ -145,8 +147,18 @@ class PersistentProvider(BaseProvider):
         )
 
     # ---- lifecycle ----------------------------------------------------
-    def ensure(self, key: str, spec: dict) -> Handle:
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle:
+        """provision a computer.
+
+        `env` is validated and then deliberately not sent: a computer create request has
+        no env field, and routing a credential through `exec` would put it in a command
+        line. the harness pulls the same env from the platform at boot instead, which is
+        why `delivers_env` is False here.
+        """
         self._require()
+        if env:
+            clean_env(env)
         body = ComputerCreateRequest(**self.build_spec(spec))
         response = call(
             create_op.sync_detailed,

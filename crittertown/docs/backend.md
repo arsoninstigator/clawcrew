@@ -77,14 +77,14 @@ if you are putting a real ui in front of this, the ui gets a platform session an
 crittertown with the token on the server side. crittertown does not model end users, it models
 agents and one owner, and pretending otherwise would be two half-auth systems.
 
-## per-agent credentials: agent-vault by credential-broker
+## per-agent credentials: agentvault, baked in
 
 an agent with a `GITHUB_TOKEN` in its environment is one prompt injection away from
 leaking it, and an agent that echoes its environment puts the key in a run row. so a key
 is never handed to an agent. it is handed to a proxy, and the agent is given a route
 through it.
 
-[agent-vault](https://github.com/CredentialBroker/agent-vault) is that proxy: a single binary
+[agentvault](https://github.com/Infisical/agent-vault), infisical's open-source agent vault, is that proxy: a single binary
 that stores credentials, exposes a management api on `14321` and a MITM proxy on `14322`,
 and attaches the real credential to outbound requests. run it on a **different machine**
 from the agents, because that separation is the security claim:
@@ -93,7 +93,7 @@ from the agents, because that separation is the security claim:
 docker run -d --name agent-vault \
   -p 14321:14321 -p 14322:14322 \
   -e CREDENTIAL_BROKER_MASTER_PASSWORD=... \
-  -v agent-vault-data:/data credential-broker/agent-vault
+  -v agent-vault-data:/data agent-vault   # their published image, or build their repo
 ```
 
 then, per agent, crittertown stores a **grant**, never a secret:
@@ -118,18 +118,44 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 - revoking writes a row and an audit entry (`vault.revoked`). the grant history is the
   point: an audit trail that deletes itself is not one
 
-### what is deliberately not wired
+### how the env reaches the sandbox
 
-minting agent-vault tokens through its management api. the paths for that api are not
-published in a form this repo can pin, and guessing endpoints is how a "provider support"
-matrix rots. so the operator issues the token (vault ui, cli or their own automation) and
-crittertown distributes it per agent, with scopes, expiry and revocation. when the api is
-stable enough to pin, the change is one method on `CredentialBroker`.
+two paths, chosen by the provider, and the difference is a credential's safety rather than
+a preference:
 
-the second thing not wired: injecting `HTTPS_PROXY` into a sandbox at spawn. the env
-contract is built and tested (`sandbox_env`), the provider interface takes no env argument
-yet, so `crittertown/docs/remaining.md` carries that as the next step. docker and k8s providers are
-where it lands first, because they accept env at create time.
+- **at creation**, when the provider's create request has an env field. `ensure()` takes
+  `env` and the adapter forwards it; `delivers_env = True`. this is ephemeral sandboxes and
+  the local dev provider. nothing records the values: the handle that lands in the
+  `computers` row carries a ref, not an env
+- **at boot**, when it does not. a computer create request has no env field
+  (`delivers_env = False`, same for hosted whose sdk surface is theirs), so the computer is
+  handed nothing and its harness calls `GET /agents/{agent_id}/sandbox-env` once at boot,
+  authenticated with the platform token, and keeps the values in memory
+  (`agents/runtime.py: pull_env`). a secret never sits in an exec command line or on the
+  machine's disk, which is where the obvious implementation leaves it
+
+per-agent env never reaches a row, a response or a log. `GET /agents/{id}/vault` shows the
+shape with every value masked, `pull_env` returns names and a count, and
+`crittertown/tests/test_sandbox_env.py` asserts the token is absent from the computers row
+and from the response that created it.
+
+### where the codes actually live
+
+the broker distributes; it is not the vault of record. the two baked-in ingredients are
+[agentvault](https://github.com/Infisical/agent-vault) for brokering and
+[kernel](https://github.com/kernel/kernel-images) for browsers (a throwaway chromium in your
+own container, per `crittertown/thirdparty.md`).
+
+kernel's managed auth also offers a vault route that points at 1password, and that is
+declined on purpose. the codes live upstream in **proton pass** or **bitwarden** (both open
+source, both self-hostable), permissioned per agent, and the grant is issued **up the command
+chain**: the agent asks, its coordinator in the org chart is the one who approves, and the
+approval is a gate row with an audit trail rather than a shared master password.
+
+honest status: the request-and-approve path exists (`gates`, `a2a`, the org chart), and what
+is not built is the adapter that mints or reads a code from proton pass or bitwarden when a
+gate is approved. until it is, the operator issues the brokered token by hand, which is the
+same shape with one manual step.
 
 ## env
 

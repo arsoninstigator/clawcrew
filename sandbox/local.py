@@ -17,9 +17,9 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import Any
+from typing import Any, Mapping
 
-from sandbox.base import BaseProvider, ExecResult, Handle
+from sandbox.base import BaseProvider, ExecResult, Handle, clean_env
 
 # a deliberately small allowlist of binaries for the local provider. anything
 # else is refused, which keeps the dev provider from becoming a foot-gun.
@@ -39,9 +39,14 @@ class LocalProvider(BaseProvider):
     def __init__(self, root: str = ""):
         self.root = root or os.path.join(tempfile.gettempdir(), "crittertown-local")
         os.makedirs(self.root, exist_ok=True)
+        # handle ref -> env. in memory, for the life of this provider, like the handle
+        self._env: dict[str, dict[str, str]] = {}
 
     def configured(self) -> bool:
         return True
+
+    def env_for(self, handle: Handle) -> dict[str, str]:
+        return dict(self._env.get(handle.ref, {}))
 
     def _dir(self, key: str, kind: str) -> str:
         safe = "".join(ch for ch in key if ch.isalnum() or ch in "-_") or "anon"
@@ -49,13 +54,19 @@ class LocalProvider(BaseProvider):
         os.makedirs(path, exist_ok=True)
         return path
 
-    def ensure(self, key: str, spec: dict) -> Handle:
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle:
         spec = spec or {}
         kind = spec.get("kind", "ephemeral")
+        wanted = clean_env(env) if env else {}
         if kind == "persistent":
             path = self._dir(key, "persistent")
         else:
             path = tempfile.mkdtemp(prefix="cc-eph-", dir=self._dir(key, "ephemeral"))
+        if wanted:
+            # kept in memory only: this provider runs subprocesses on this host, so the
+            # env exists for as long as the handle does and is never written anywhere
+            self._env[path] = wanted
         return Handle(provider=self.name, kind=kind, ref=path, meta={"cwd": path})
 
     def _guard(self, command: str) -> None:
@@ -85,7 +96,8 @@ class LocalProvider(BaseProvider):
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env={**os.environ, "CRITTERTOWN_SANDBOX": handle.ref},
+                env={**os.environ, "CRITTERTOWN_SANDBOX": handle.ref,
+                     **self.env_for(handle)},
             )
         except subprocess.TimeoutExpired:
             return ExecResult(

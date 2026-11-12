@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 
@@ -44,7 +44,7 @@ from vendor.ephemeral_cloud_api.models.resumed_sandbox import ResumedSandbox
 from vendor.ephemeral_cloud_api.models.sandbox import Sandbox
 from vendor.ephemeral_cloud_api.models.sandbox_detail import SandboxDetail
 from vendor.ephemeral_cloud_api.models.sandbox_pause_request import SandboxPauseRequest
-from sandbox.base import BaseProvider, ExecResult, Handle
+from sandbox.base import BaseProvider, ExecResult, Handle, clean_env
 from sandbox.transport import DEFAULT_EPHEMERAL_BASE, call, ephemeral_client, field, guard, unwrap
 
 READY_STATES = {"running", "ready", "active", "started"}
@@ -105,7 +105,12 @@ class EphemeralProvider(BaseProvider):
         return self.configured() and _sdk() is not None
 
     # ---- translation --------------------------------------------------
-    def build_spec(self, key: str, spec: dict) -> dict:
+    def build_spec(self, key: str, spec: dict, env: Mapping[str, str] | None = None) -> dict:
+        """translate a runtime dict into a NewSandbox body.
+
+        `env` wins over anything in `spec`: it is the broker's answer and the only
+        place a credential is allowed to come from.
+        """
         spec = spec or {}
         body: dict[str, Any] = {
             "template_id": spec.get("template")
@@ -115,9 +120,10 @@ class EphemeralProvider(BaseProvider):
             "timeout": int(spec.get("ttl_seconds") or spec.get("timeout") or 900),
             "metadata": {"crittertown_key": key, **(spec.get("metadata") or {})},
         }
-        env = spec.get("env") or spec.get("envVars") or spec.get("env_vars")
-        if env:
-            body["env_vars"] = env
+        from_spec = spec.get("env") or spec.get("envVars") or spec.get("env_vars") or {}
+        merged = {**(from_spec if isinstance(from_spec, dict) else {}), **clean_env(env)}
+        if merged:
+            body["env_vars"] = merged
         if spec.get("allow_internet_access") is not None:
             body["allow_internet_access"] = bool(spec["allow_internet_access"])
         if spec.get("network"):
@@ -144,9 +150,10 @@ class EphemeralProvider(BaseProvider):
         )
 
     # ---- lifecycle ----------------------------------------------------
-    def ensure(self, key: str, spec: dict) -> Handle:
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle:
         self._require()
-        body = NewSandbox(**self.build_spec(key, spec))
+        body = NewSandbox(**self.build_spec(key, spec, env))
         response = call(
             create_op.sync_detailed,
             client=self.api,

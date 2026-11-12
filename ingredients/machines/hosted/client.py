@@ -18,9 +18,9 @@ pretending the sandbox is still reachable.
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Mapping
 
-from sandbox.base import BaseProvider, ExecResult, Handle
+from sandbox.base import BaseProvider, ExecResult, Handle, clean_env
 from core.errors import ProviderFailure, ProviderNotConfigured
 
 DEFAULT_BASE = "https://api.hosted.ai"
@@ -36,6 +36,9 @@ def sdk() -> Any | None:
 
 
 class HostedProvider(BaseProvider):
+    # their create call has no documented env argument, so the harness pulls the env
+    # from the platform at boot rather than this adapter guessing at the sdk surface
+    delivers_env = False
     name = "hosted"
     kind = "ephemeral"  # their sandboxes pause and snapshot, so they can persist too
 
@@ -77,8 +80,11 @@ class HostedProvider(BaseProvider):
                 "hosted is not configured; set HOSTED_API_KEY", provider=self.name)
 
     # ---- lifecycle -----------------------------------------------------
-    def ensure(self, key: str, spec: dict) -> Handle:
+    def ensure(self, key: str, spec: dict,
+               env: Mapping[str, str] | None = None) -> Handle:
         self._require()
+        if env:  # validated, then delivered at boot instead of create time
+            clean_env(env)
         spec = spec or {}
         name = str(spec.get("name") or key)[:60]
         kwargs: dict[str, Any] = {"name": name, "api_key": self.api_key,

@@ -1371,6 +1371,19 @@ def create_api(app: App | None = None) -> FastAPI:
         return {"grants": app.vault.list(agent_id=agent_id),
                 "env": app.vault.describe_env(agent_id)}
 
+    @api.get("/agents/{agent_id}/sandbox-env")
+    def sandbox_env(agent_id: str) -> dict:
+        """the env a sandbox pulls at boot, instead of receiving it at create time.
+
+        the values are resolved from this process's environment at call time: never
+        stored, never logged, and returned only to a caller that already holds the
+        platform token, which is the agent's own harness. a missing token is a 409 with
+        the grant named, because a sandbox that boots without its proxy is worse than one
+        that fails to boot.
+        """
+        app.crews.get_agent(agent_id)
+        return {"agent_id": agent_id, "env": app.vault.sandbox_env(agent_id)}
+
     @api.delete("/vault/{grant_id}")
     def revoke_vault(grant_id: str, reason: str = Query(default=""),
                      actor: str = Query(default="owner")) -> dict:

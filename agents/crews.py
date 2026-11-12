@@ -89,6 +89,9 @@ class CrewService:
         # set by the composition root. when present, `scope` is read from the agent's
         # profile rows instead of the legacy json column, so there is one source.
         self.profile = None
+        # set by the composition root, like `profile`. when present, a sandbox that can
+        # take env at creation is handed the broker's answer and nothing else.
+        self.vault = None
         self.store = store
         self.registry = registry
         self.keys = keys if keys is not None else attest.KeyStore(store)
@@ -461,6 +464,21 @@ class CrewService:
         }
 
     # ---- persistent computers ------------------------------------------
+    def sandbox_env(self, agent_id: str, provider=None) -> dict:
+        """what this sandbox may be handed at creation.
+
+        empty unless there is a broker and the provider's create request takes env. a
+        provider that cannot (`delivers_env` False: a computer create has no env field)
+        gets nothing here; its harness pulls the same values from the platform at boot,
+        which is the only path that does not put a credential in an exec command line.
+
+        the values are never returned by this method's callers: they go straight into the
+        provider call, and the `computers` row keeps the handle, not the env.
+        """
+        if self.vault is None or not getattr(provider, "delivers_env", True):
+            return {}
+        return self.vault.sandbox_env(agent_id)
+
     def ensure_computer(self, agent_id: str, spec: dict | None = None) -> dict:
         """provision (or reuse) the agent's persistent computer."""
         agent = self.get_agent(agent_id)
@@ -478,7 +496,11 @@ class CrewService:
         if self.registry is None:
             raise ValidationError("no sandbox registry configured")
         provider = self.registry.get((spec or {}).get("provider") or agent["runtime"].get("provider", "persistent"))
-        handle = provider.ensure(f"{agent['team_id']}:{agent['name']}", (spec or {}) | {"kind": "persistent"})
+        handle = provider.ensure(
+            f"{agent['team_id']}:{agent['name']}",
+            (spec or {}) | {"kind": "persistent"},
+            env=self.sandbox_env(agent_id, provider),
+        )
         computer_id = row["id"] if row else new_id("cmp")
         with self.store.tx() as c:
             c.execute(

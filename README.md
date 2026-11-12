@@ -1,6 +1,6 @@
 # crittertown
 
-![crittertown](crittertown/docs/crittertown.png)
+![crittertown](crittertown/assets/logo.png)
 
 > agent crews that take shifts, hold cards, and sign their own work
 
@@ -11,6 +11,12 @@ are still crews, and the slack-shaped place where people and crews talk is `base
 town is the frame that holds several crews, one board and a set of machines; a crew is the
 unit of work. `crittertown/glossary.md` keeps the words the api uses apart from the ones we
 coined.
+
+## the eight verbs
+
+create, curate, cultivate, collect, connect, collaborate, coordinate, construct. one crew
+is the whole list, and every verb maps to something in the tree. `crittertown/positioning/words/c.md`
+has the table; `w.md` beside it is where the next letter goes when there is one.
 
 ## what is this
 
@@ -106,9 +112,9 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (611 tests, no network, no sleeps), and it is honest about what is
-not done: env injection into sandboxes, and the npm and mcp entry
-points in `get/`. see `crittertown/docs/remaining.md`.
+it runs, it is tested (637 tests, no network, no sleeps), and it is honest about what is
+not done: the npm and mcp entry points in `get/`, and the adapter that mints a code from
+proton pass or bitwarden when a gate is approved. see `crittertown/docs/remaining.md`.
 
 ## licence
 

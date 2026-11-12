@@ -335,5 +335,7 @@ still open, in the order it is worth doing:
    `core/dialect.py` as the single translation step, and the published ddl now checked
    against the schema by a test (it had gone stale at 34 of 45 tables, and carried an
    `autoincrement` postgres does not accept). see `crittertown/docs/backend.md`.
-2. **sandbox env injection.** `CredentialBroker.sandbox_env()` is built and tested; the
-   provider interface needs an `env` argument before a sandbox can actually use it.
+2. ~~**sandbox env injection.**~~ done: `ensure()` takes `env`, providers declare
+   `delivers_env`, and one that cannot (a computer's create request has no env field)
+   pulls the same values at boot from `GET /agents/{id}/sandbox-env`. see
+   `crittertown/docs/backend.md`.
