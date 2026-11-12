@@ -20,6 +20,7 @@ COPY create ./create
 COPY sandbox ./sandbox
 COPY ingredients ./ingredients
 COPY toolbox ./toolbox
+COPY vendor ./vendor
 # the cluster extra, because the worker and beat containers run the broker's binary
 RUN pip install --no-cache-dir -e ".[schedule]"
 

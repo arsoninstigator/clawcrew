@@ -23,6 +23,13 @@ def agent_stage() -> str:
     return text[start:]
 
 
+def platform_stage() -> str:
+    text = DOCKERFILE.read_text()
+    start = text.find("as platform")
+    end = text.find("as agent-vm")
+    return text[start:end] if start != -1 and end != -1 else ""
+
+
 def copied_paths(stage: str) -> list[pathlib.Path]:
     out = []
     for line in stage.splitlines():
@@ -80,6 +87,19 @@ class IngredientBoundaryTests(unittest.TestCase):
             self.assertTrue((ROOT / rel).is_dir(), f"{rel} is missing")
             self.assertTrue((ROOT / rel / "__init__.py").exists() or list((ROOT / rel).glob("*.py")),
                             f"{rel} has no python in it")
+
+    def test_the_platform_stage_copies_every_package_it_imports(self):
+        """a missing package is an ImportError at the first request, not at build time:
+        `pip install -e .` is happy with a source tree the image never copied."""
+        stage = platform_stage()
+        packages = sorted(
+            path.name
+            for path in ROOT.iterdir()
+            if path.is_dir() and (path / "__init__.py").exists()
+        )
+        self.assertTrue(packages, "found no packages at the root to check")
+        for name in packages:
+            self.assertIn(f"COPY {name} ./{name}", stage, f"the image does not copy {name}/")
 
     def test_the_platform_stage_is_named_and_the_deploy_asks_for_it(self):
         """the agent vm is the last stage, so a bare build produces the harness. every
