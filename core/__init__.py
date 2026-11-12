@@ -6,9 +6,14 @@ reviewable a2a channel, and visual workflows - self hosted.
     from core import build_app
     app = build_app()
     crew = app.crews.create_team("growth", mission="own the funnel")
+
+importing a `core.*` submodule must not build the object graph, so `App` and `build_app`
+are the only names here that are lazy: a broker entrypoint or a config read pulls one
+module, not the platform.
 """
 
-from core.app import App, build_app
+from __future__ import annotations
+
 from core.config import Settings
 from core.errors import (
     ClawCrewError,
@@ -35,3 +40,13 @@ __all__ = [
     "ValidationError",
     "__version__",
 ]
+
+_LAZY = ("App", "build_app")
+
+
+def __getattr__(name: str):
+    if name in _LAZY:  # pragma: no cover - exercised by any `from core import build_app`
+        from core.app import App, build_app
+
+        return {"App": App, "build_app": build_app}[name]
+    raise AttributeError(f"module 'core' has no attribute {name!r}")
