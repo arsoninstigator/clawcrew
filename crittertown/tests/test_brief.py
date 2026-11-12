@@ -81,13 +81,13 @@ class BriefTests(AppCase):
 
     def test_the_pack_makes_the_night_do_something(self):
         dry = self.app.triggers.install_pack(self.team["id"], "overnight", dry_run=True)
-        self.assertEqual(len(dry["rules"]), 4)
+        self.assertEqual(len(dry["rules"]), 5)
         self.assertEqual(dry["created"], [])
         installed = self.app.triggers.install_pack(self.team["id"], "overnight")
-        self.assertEqual(len(installed["created"]), 4)
+        self.assertEqual(len(installed["created"]), 5)
         again = self.app.triggers.install_pack(self.team["id"], "overnight")
         self.assertEqual(again["created"], [])
-        self.assertEqual(len(again["skipped"]), 4)
+        self.assertEqual(len(again["skipped"]), 5)
 
     def test_a_nightly_brief_job_builds_and_delivers_it(self):
         self.app.triggers.install_pack(self.team["id"], "overnight")

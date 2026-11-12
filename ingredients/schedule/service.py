@@ -24,7 +24,7 @@ from typing import Any
 
 from core.config import Settings
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import NotFound, ProviderNotConfigured, ValidationError
+from core.errors import CritterTownError, NotFound, ProviderNotConfigured, ValidationError
 
 JOB_KINDS = {"task", "workflow", "saga", "poll"}
 
@@ -367,6 +367,8 @@ class Worker:
             outcome = self.runner.dispatch(task["id"], max_turns=int(payload.get("max_turns", 6)))
             return {"task_id": task["id"], "run_id": outcome["run_id"]}
         if job.kind in {"task", "dispatch"}:
+            if not payload.get("task_id"):
+                return self._dispatch_idle(payload)
             outcome = self.runner.dispatch(
                 payload["task_id"], max_turns=int(payload.get("max_turns", 6))
             )
@@ -407,6 +409,35 @@ class Worker:
         if not poll_id:
             raise ValidationError("poll job needs poll_id")
         return self.polls.tick(poll_id)
+
+    def _dispatch_idle(self, payload: dict) -> dict:
+        """dispatch the ready cards nobody has touched for a while.
+
+        the idle check belongs here rather than in a trigger condition because a
+        condition is evaluated against the event, and the event is one nightly tick with
+        no card in it. one bad card does not stop the rest: a card whose dispatch raises
+        is reported back and the night continues, which is the difference between a
+        report and a stall.
+        """
+        team_id = payload.get("team_id")
+        if not team_id:
+            raise ValidationError("a dispatch job with no task_id needs team_id")
+        idle_minutes = float(payload.get("idle_minutes") or 0)
+        limit = max(1, int(payload.get("limit") or 10))
+        max_turns = int(payload.get("max_turns", 6))
+        cutoff = now() - idle_minutes * 60
+        ready = self.kanban.list_tasks(team_id, column="ready", limit=max(limit * 4, 20))
+        stale = [t for t in ready if float(t.get("updated_date") or 0) <= cutoff][:limit]
+        dispatched: list[dict] = []
+        failed: list[dict] = []
+        for task in stale:
+            try:
+                outcome = self.runner.dispatch(task["id"], max_turns=max_turns)
+                dispatched.append({"task_id": task["id"], "run_id": outcome["run_id"]})
+            except CritterTownError as exc:
+                failed.append({"task_id": task["id"], "error": str(exc)[:300]})
+        return {"team_id": team_id, "idle_minutes": idle_minutes, "considered": len(ready),
+                "dispatched": dispatched, "failed": failed}
 
     # ---- the overnight pack's three job kinds --------------------------
     def _brief(self, payload: dict) -> dict:

@@ -259,7 +259,7 @@ nothing else. it may only produce definitions `validate_definition` accepts.
 
 ---
 
-## 5. the overnight pack
+## 5. the overnight pack (built)
 
 right now `schedule.nightly` fires into an empty rule set. the pack is a small,
 reviewed set of rules a crew adopts in one call:
@@ -281,11 +281,17 @@ name.
 5. **a2a digest**: `schedule.nightly` -> writes pending a2a into the crew context key
    `a2a.pending`, which is an input to the brief rather than a second delivery.
 
-what the pack needs that does not exist yet, and is therefore in scope here:
+what the pack needed is now in, and each piece was a real defect rather than a feature:
 
-- job kind `brief` in `ACTIONS`, plus the worker branch that runs it.
-- an idle-age condition for dispatch (today conditions are exact matches only).
-- a delivery target for the brief, per crew. see below.
+- `brief`, `card` and `shift_roll` job kinds exist and are held by tests
+- conditions take comparisons (`age_minutes>60`), so an idle check can be read and
+  edited by the operator instead of hiding in a job branch
+- `dispatch` with no `task_id` dispatches the ready cards idle past `idle_minutes`,
+  one card at a time, reporting a failure instead of stopping the night
+- and the one that mattered most: `schedule.nightly` fires with **no crew in context**,
+  so every rule's `${team_id}` rendered empty and the night's first job died on
+  validation. a rule now renders in its own crew's context. `crittertown/tests/test_overnight_pack.py`
+  holds all of it.
 
 ---
 

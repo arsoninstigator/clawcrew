@@ -16,7 +16,8 @@ coined.
 
 create, curate, cultivate, collect, connect, collaborate, coordinate, construct. one crew
 is the whole list, and every verb maps to something in the tree. `crittertown/positioning/words/c.md`
-has the table; `w.md` beside it is where the next letter goes when there is one.
+has the table, and `w.md` beside it holds the nine w's: who, what, when, where, why,
+why-not, world, way, wire, with the evidence for each and the gaps named.
 
 ## what is this
 
@@ -112,7 +113,7 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (637 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (649 tests, no network, no sleeps), and it is honest about what is
 not done: the npm and mcp entry points in `get/`, and the adapter that mints a code from
 proton pass or bitwarden when a gate is approved. see `crittertown/docs/remaining.md`.
 

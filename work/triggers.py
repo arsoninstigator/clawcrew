@@ -135,7 +135,11 @@ class TriggerService:
             trigger = self._trigger(row)
             if trigger["condition"] and not self._matches(trigger["condition"], context):
                 continue
-            payload = self._render(trigger["payload"], context)
+            # a rule belongs to a crew, and `schedule.nightly` fires with no crew in
+            # context. render per rule with its own team, or the overnight pack's
+            # `${team_id}` renders empty and every 2am job dies on validation.
+            rule_context = {**context, "team_id": context.get("team_id") or trigger["team_id"]}
+            payload = self._render(trigger["payload"], rule_context)
             job_id = None
             if self.broker is not None:
                 job_id = self.broker.enqueue(trigger["action"], payload)
@@ -157,26 +161,56 @@ class TriggerService:
         return fired
 
     # ---- condition + template ------------------------------------------
-    def _parse_condition(self, condition: str) -> list[tuple[str, str]]:
-        pairs = []
+    def _parse_condition(self, condition: str) -> list[tuple[str, str, str]]:
+        """`path=value`, or `path>value` and friends.
+
+        comparisons are here because "dispatch the cards nobody touched for two hours"
+        is a condition on a number, not on a word, and exact match forced the idle check
+        to live in a job branch where it could not be read or edited by the operator.
+        """
+        pairs: list[tuple[str, str, str]] = []
         for part in str(condition).split(","):
             part = part.strip()
             if not part:
                 continue
-            if "=" not in part:
-                raise ValidationError(f"condition '{part}' must look like path=value")
-            path, value = part.split("=", 1)
-            pairs.append((path.strip(), value.strip()))
+            for op in (">=", "<=", "!=", ">", "<", "="):
+                if op in part:
+                    path, value = part.split(op, 1)
+                    pairs.append((path.strip(), op, value.strip()))
+                    break
+            else:
+                raise ValidationError(
+                    f"condition '{part}' must look like path=value or path>number")
         if not pairs:
             raise ValidationError("empty condition")
         return pairs
 
     def _matches(self, condition: str, context: dict) -> bool:
-        for path, value in self._parse_condition(condition):
+        for path, op, value in self._parse_condition(condition):
             actual = lookup(context, path)
             if isinstance(actual, bool):
                 actual = "true" if actual else "false"
-            if str(actual) != value:
+            if op == "=":
+                if str(actual) != value:
+                    return False
+                continue
+            if op == "!=":
+                if str(actual) == value:
+                    return False
+                continue
+            ours, theirs = _as_number(actual), _as_number(value)
+            if ours is None or theirs is None:
+                # a comparison against something that is not a number is false, not an
+                # exception: a condition is edited at runtime and must not take the
+                # emitter down when it is wrong
+                return False
+            if op == ">" and not ours > theirs:
+                return False
+            if op == ">=" and not ours >= theirs:
+                return False
+            if op == "<" and not ours < theirs:
+                return False
+            if op == "<=" and not ours <= theirs:
                 return False
         return True
 
@@ -270,8 +304,20 @@ PACKS: dict[str, list[dict]] = {
                      "column": "review"}},
         {"name": "overnight: a2a digest", "event": "schedule.nightly", "action": "brief",
          "payload": {"team_id": "${team_id}", "include_a2a": True}},
+        {"name": "overnight: re-dispatch idle", "event": "schedule.nightly",
+         "action": "dispatch",
+         "payload": {"team_id": "${team_id}", "idle_minutes": 120, "limit": 5}},
     ]
 }
+
+
+def _as_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def lookup(context: Any, path: str) -> Any:
