@@ -2,7 +2,7 @@
 
 the wire follows the **A2A specification** (a2aproject/A2A, now under the linux
 foundation): json-rpc 2.0, `Message` with `parts`, `Task` with `status.state`, agent
-cards published at the well-known path, sse for streaming. `clawcrew/a2a_protocol.py`
+cards published at the well-known path, sse for streaming. `crittertown/a2a_protocol.py`
 already emits those shapes and the vendored `a2a_types` validates them.
 
 a human needs a different projection of the same rows: who spoke, to whom, about
@@ -14,7 +14,7 @@ the protocol landscape, since "which protocol" was a real question:
 
   A2A (linux foundation)  json-rpc, agent cards, tasks/messages/artifacts, sse.
                           the interop default. this is what the wire speaks.
-  ACP (agntcy)            rest/openapi, runs + threads, audit leaning. clawcrew
+  ACP (agntcy)            rest/openapi, runs + threads, audit leaning. crittertown
                           serves a rest read path over the same rows so an
                           acp-minded client has something to call.
   ANP                     did-based discovery for an open agent mesh. out of scope:
@@ -88,7 +88,7 @@ def render_message(
         sentence += "  (rejected in review)"
     wire = spec.message_to_json(message, role=spec.ROLE_AGENT)
     wire.setdefault("metadata", {})
-    wire["metadata"]["clawcrew"] = {
+    wire["metadata"]["crittertown"] = {
         "agentId": sender.get("agent_id") or message.get("from_agent_id"),
         "agentKey": sender.get("agent_key", ""),
         "recipientId": message.get("to_agent_id"),

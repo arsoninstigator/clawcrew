@@ -203,7 +203,7 @@ def verify_entries(entries: list[dict]) -> dict:
     """recompute a trail from the entries alone.
 
     this is the part worth handing to someone else: it needs no database, no running
-    clawcrew, and no trust in us. every row must chain to the one before it, and every
+    crittertown, and no trust in us. every row must chain to the one before it, and every
     row that claims a signer must carry a signature that verifies against that pubkey.
     """
     expected_prev = ""

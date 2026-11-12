@@ -4,7 +4,7 @@ a crew already has a local kanban for its own lanes. manage is the other half:
 projects that outlive one crew, where agents are members with a role and an
 assignee slot, and where the unit of delegation is an issue instead of a prompt.
 
-clawcrew agents pull from it the way an external runner does, so the agent never
+crittertown agents pull from it the way an external runner does, so the agent never
 has to know what woke it up (a delegation, an @mention, a status trigger, a
 schedule, a manual run) -- the instance decides, the run arrives with the issue
 attached:
@@ -54,7 +54,7 @@ class ManageClient:
             "self_hosted": True,
             "base_url": _root(self.base_url),
             "configured": self.configured(),
-            "needs": "CLAWCREW_MANAGE_API_KEY (an external agent's api key, from the agent's page)",
+            "needs": "CRITTERTOWN_MANAGE_API_KEY (an external agent's api key, from the agent's page)",
         }
 
     def _client(self) -> httpx.Client:
@@ -62,7 +62,7 @@ class ManageClient:
             raise ProviderNotConfigured(
                 "no manage agent key",
                 provider="manage",
-                hint="create the agent in manage, copy its api key, set CLAWCREW_MANAGE_BASE_URL and CLAWCREW_MANAGE_API_KEY",
+                hint="create the agent in manage, copy its api key, set CRITTERTOWN_MANAGE_BASE_URL and CRITTERTOWN_MANAGE_API_KEY",
             )
         return httpx.Client(
             base_url=_root(self.base_url),

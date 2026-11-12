@@ -25,7 +25,7 @@ from comms.a2a import A2AService
 from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import ClawCrewError, NotFound, ValidationError
+from core.errors import CritterTownError, NotFound, ValidationError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.runtime import AgentModel, build_model, render_prompt
 from sandbox import Handle, ProviderRegistry
@@ -155,7 +155,7 @@ class CrewRunner:
             if not done:
                 result = {"summary": "turn budget exhausted", "turns": max_turns}
                 steps.append({"turn": max_turns, "thought": "turn budget exhausted", "steps": []})
-        except ClawCrewError as exc:
+        except CritterTownError as exc:
             error = f"{exc.code}: {exc.message}"
             self._update_run(run_id, steps, status="failed", error=error)
             self.kanban.move(task_id, "blocked", agent["id"], note=error[:500])
@@ -170,7 +170,7 @@ class CrewRunner:
             if provider is not None and handle is not None and handle.kind == "ephemeral":
                 try:
                     provider.destroy(handle)
-                except ClawCrewError:
+                except CritterTownError:
                     pass
 
         self._update_run(run_id, steps, status="succeeded")
@@ -208,7 +208,7 @@ class CrewRunner:
             for future, task in futures.items():
                 try:
                     outcomes.append(future.result())
-                except ClawCrewError as exc:
+                except CritterTownError as exc:
                     outcomes.append({"task": task, "error": exc.to_dict()})
         return outcomes
 

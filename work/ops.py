@@ -119,7 +119,7 @@ def _http_json(url: str, headers: dict) -> Any:
 
 
 def build_ops(deps: Any) -> OpRegistry:
-    """the ops clawcrew ships. `deps` carries the services they call."""
+    """the ops crittertown ships. `deps` carries the services they call."""
     kanban, channels, scheduler = deps.kanban, deps.channels, deps.scheduler
 
     def task_create(args: dict) -> dict:

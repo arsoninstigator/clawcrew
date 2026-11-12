@@ -40,7 +40,7 @@ class ManageBridge:
         run_id = run.get("id")
         issue = run.get("issueIdentifier") or run.get("issueId")
         try:
-            self.client.heartbeat(run_id, note=f"clawcrew picked up {issue or 'the run'}")
+            self.client.heartbeat(run_id, note=f"crittertown picked up {issue or 'the run'}")
             outcome = self.executor(run) or {}
         except ProviderFailure:
             raise

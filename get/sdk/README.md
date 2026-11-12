@@ -8,8 +8,8 @@ pip install -e ".[dev]"
 ```
 
 ```python
-from clawcrew import build_app
-from clawcrew.config import Settings
+from crittertown import build_app
+from crittertown.config import Settings
 
 app = build_app(Settings(database_path="crew.db"))
 

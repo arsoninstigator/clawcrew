@@ -52,7 +52,7 @@ class N8NClient:
             "self_hosted": True,
             "base_url": _root(self.base_url),
             "configured": self.configured(),
-            "needs": "CLAWCREW_N8N_API_KEY (Settings > n8n API in your instance)",
+            "needs": "CRITTERTOWN_N8N_API_KEY (Settings > n8n API in your instance)",
         }
 
     def _client(self) -> httpx.Client:
@@ -99,7 +99,7 @@ class N8NClient:
 
     def create_workflow(self, definition: dict, name: str | None = None) -> dict:
         body = {
-            "name": name or definition.get("name") or "clawcrew",
+            "name": name or definition.get("name") or "crittertown",
             "nodes": definition.get("nodes") or [],
             "connections": definition.get("connections") or {},
             "settings": definition.get("settings") or {},
@@ -124,8 +124,8 @@ class N8NClient:
         return payload.get("data") or []
 
     def export_workflow(self, workflow_id: str) -> dict:
-        """the shape `clawcrew.importers.from_n8n` already understands, so a
-        workflow running on your instance can be brought into a clawcrew dag."""
+        """the shape `crittertown.importers.from_n8n` already understands, so a
+        workflow running on your instance can be brought into a crittertown dag."""
         workflow = self.get_workflow(workflow_id)
         return {
             "name": workflow.get("name"),

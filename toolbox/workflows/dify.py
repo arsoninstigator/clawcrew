@@ -30,7 +30,7 @@ def _root(base_url: str) -> str:
 class DifyClient:
     base_url: str = DEFAULT_BASE
     api_key: str = ""
-    user: str = "clawcrew"
+    user: str = "crittertown"
     timeout: float = 120.0
     transport: httpx.BaseTransport | None = None
 
@@ -43,7 +43,7 @@ class DifyClient:
             "self_hosted": True,
             "base_url": _root(self.base_url),
             "configured": self.configured(),
-            "needs": "CLAWCREW_DIFY_API_KEY (a dify app key, starts with app-)",
+            "needs": "CRITTERTOWN_DIFY_API_KEY (a dify app key, starts with app-)",
         }
 
     def _client(self) -> httpx.Client:
@@ -111,6 +111,6 @@ class DifyClient:
         )
 
 
-def make(base_url: str = DEFAULT_BASE, api_key: str = "", user: str = "clawcrew",
+def make(base_url: str = DEFAULT_BASE, api_key: str = "", user: str = "crittertown",
          transport=None, timeout: float = 120.0):
     return DifyClient(base_url=base_url, api_key=api_key, user=user, transport=transport, timeout=timeout)

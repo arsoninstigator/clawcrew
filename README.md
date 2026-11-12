@@ -1,12 +1,20 @@
-# clawcrew
+# crittertown
 
-![clawcrew](clawcrew/docs/clawcrew.png)
+![crittertown](crittertown/docs/crittertown.png)
 
 > agent crews that take shifts, hold cards, and sign their own work
 
+## the name
+
+the whole thing is a town: `critter.town`, `crittertown` in the code. the teams inside it
+are still crews, and the slack-shaped place where people and crews talk is `basecamp`. the
+town is the frame that holds several crews, one board and a set of machines; a crew is the
+unit of work. `crittertown/glossary.md` keeps the words the api uses apart from the ones we
+coined.
+
 ## what is this
 
-clawcrew is a backend for teams of ai agents that actually finish things.
+crittertown is a backend for teams of ai agents that actually finish things.
 
 not "chat with an agent". a crew has agents with roles, skills and their own machines. it
 has a board, rooms, an org chart, and shifts. work arrives as a card, gets picked up by
@@ -15,7 +23,7 @@ whoever is on duty, and shows up again in the morning brief with the numbers att
 the thing i kept hitting with other agent stacks is that every one of them is a single
 loop with a prompt in it. the moment the work is longer than a context window, or there
 are two agents, or something needs a human to say yes, you end up being the scheduler.
-clawcrew is that scheduler, minus me.
+crittertown is that scheduler, minus me.
 
 ## the shape
 
@@ -75,7 +83,7 @@ infrastructure/ later: how the platform itself is deployed
 an ingredient is named for what it does, not for the project it came from. `persistent` and
 `ephemeral` are machines, `browser` is a page, `schedule` is the queue, `workflows` is a
 flow, `manage` is the board, the credential broker is how an agent borrows a key without
-holding one. `clawcrew/thirdparty.md` is the one file that names upstreams, and it is also
+holding one. `crittertown/thirdparty.md` is the one file that names upstreams, and it is also
 the argued case for every licence here.
 
 **an agent vm gets none of it.** the platform carries ingredients because the platform is
@@ -90,17 +98,18 @@ agents/ comms/ work/ org/ manage/ create/ sandbox/   the platform's own code
 ingredients/                                        baked in, renamed for what it does
 toolbox/                                            called over an api, never copied in
 core/ api/                                          wiring and the http surface
-clawcrew/                                           glossary, docs, concept, credits, tests
+crittertown/                                           glossary, docs, concept, credits, tests
+theidea/                                            how it was assembled, and out of what
 get/                                                how to run it, one folder per way in
 configure.md                                        every env var, and what it does
 ```
 
 ## status
 
-it runs, it is tested (560 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (568 tests, no network, no sleeps), and it is honest about what is
 not done: the postgres adapter, env injection into sandboxes, and the npm and mcp entry
-points in `get/`. see `clawcrew/docs/remaining.md`.
+points in `get/`. see `crittertown/docs/remaining.md`.
 
 ## licence
 
-apache-2.0. vendored client licences and provenance are in `clawcrew/thirdparty.md`.
+apache-2.0. vendored client licences and provenance are in `crittertown/thirdparty.md`.

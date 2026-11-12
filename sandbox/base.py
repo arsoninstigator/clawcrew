@@ -1,6 +1,6 @@
 """sandbox provider contract.
 
-two lifecycles matter for clawcrew:
+two lifecycles matter for crittertown:
 
 * **persistent computers** - one per agent, kept alive between tasks. the agent's
   files, browser profile and installed tooling survive. backed by persistent.

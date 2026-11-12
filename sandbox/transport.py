@@ -1,7 +1,7 @@
 """shared plumbing for the hosted providers.
 
 both adapters talk through the openapi clients generated from each vendor's own
-spec and vendored into `clawcrew.vendor`, so the request paths, headers and body
+spec and vendored into `crittertown.vendor`, so the request paths, headers and body
 shapes are theirs, not strings we typed. this module owns the three things the two
 adapters would otherwise duplicate:
 
@@ -45,7 +45,7 @@ def persistent_client(
     api_key: str,
     base_url: str = DEFAULT_PERSISTENT_BASE,
     *,
-    client_tag: str = "clawcrew",
+    client_tag: str = "crittertown",
     timeout: float = 60.0,
     transport: httpx.BaseTransport | None = None,
 ) -> PersistentClient:
@@ -128,7 +128,7 @@ def guard(response: Any, what: str) -> Any:
 
 def call(fn, *args, what: str, **kwargs) -> Any:
     """run a generated endpoint call, mapping vendor and network errors onto the
-    clawcrew ladder so orchestration never sees an httpx exception."""
+    crittertown ladder so orchestration never sees an httpx exception."""
     try:
         return fn(*args, **kwargs)
     except ProviderFailure:

@@ -7,7 +7,7 @@ controller listens on `:7100` behind your own ingress.
 
 what that maps onto here, precisely:
 
-| clawcrew          | actor          | why                                            |
+| crittertown          | actor          | why                                            |
 |-------------------|----------------|------------------------------------------------|
 | one crew's board  | `CrewBoard`    | serialized claims over cards and shift slots   |
 | one agent's inbox | `AgentInbox`   | a stream of messages, readable from a cursor   |
@@ -15,7 +15,7 @@ what that maps onto here, precisely:
 
 the protocol both sides implement is `CoordinationBackend` in `service.py`: `claim`,
 `release`, `append`, `read`. sqlite is the reference. an actor runtime is a second
-backend, not a rewrite, which is why nothing in clawcrew imports their sdk yet: the
+backend, not a rewrite, which is why nothing in crittertown imports their sdk yet: the
 contract is written down and tested, the transport is a decision you make by running it.
 
 this file does the part that is provable without a cluster: it plans the deploy, and it
@@ -123,7 +123,7 @@ def plan_runtime(
         "expects `actors-credentials` with postgres-url, jwt-signing-key and api-key",
         "a backend that only invokes actors should get the invoke-only key, which the "
         "chart exposes as DURABLE_ACTORS_INVOKE_API_KEY",
-        "after it is up, point clawcrew at it with DURABLE_ACTORS_URL; the lease and "
+        "after it is up, point crittertown at it with DURABLE_ACTORS_URL; the lease and "
         "stream contract in service.py is what a remote backend has to satisfy",
     ]
     plan = Plan("durable-actors", "coordination", "actors", steps, notes=notes,

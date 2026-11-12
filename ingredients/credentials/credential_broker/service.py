@@ -2,7 +2,7 @@
 
 the rule this module exists to enforce: an agent never holds a provider key. a key in an
 environment variable is a key in a prompt injection away from being exfiltrated, and a key
-in a run row is a key in a log. so clawcrew stores the *name* of the variable a brokered
+in a run row is a key in a log. so crittertown stores the *name* of the variable a brokered
 token arrives in, and the sandbox talks to a credential proxy (agent-vault by credential-broker,
 or any proxy with the same shape) that attaches the real credential on the way out.
 
@@ -14,7 +14,7 @@ what lives in this file:
 - revocation that leaves a row behind, because an audit trail that deletes itself is not one
 
 what deliberately does not live here: secret values, and any invented management endpoint.
-the proxy is administered out of band (its own ui, cli or api), and clawcrew refuses to
+the proxy is administered out of band (its own ui, cli or api), and crittertown refuses to
 guess at paths it has not been told about.
 """
 

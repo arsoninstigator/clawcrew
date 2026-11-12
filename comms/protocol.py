@@ -2,17 +2,17 @@
 
 the bus in `a2a.py` is the product decision (nothing reaches an agent unreviewed).
 this module is the wire format, written against the A2A specification
-(a2aproject/A2A, Apache-2.0, `specification/a2a.proto`), so a clawcrew agent can be
-reached by any a2a client and clawcrew can reach any a2a server.
+(a2aproject/A2A, Apache-2.0, `specification/a2a.proto`), so a crittertown agent can be
+reached by any a2a client and crittertown can reach any a2a server.
 
 json shapes follow the published a2a json schema: lowerCamelCase field names and
 lowercase enum values (`"working"`, `"agent"`), which is what the schema in
-a2aproject/A2A defines and what `clawcrew/vendor/a2a_types` validates against. the
+a2aproject/A2A defines and what `crittertown/vendor/a2a_types` validates against. the
 proto spellings (`TASK_STATE_WORKING`, `ROLE_AGENT`) are still accepted on input
 because older clients emit them, but they never leave this module. the two extra
-things clawcrew keeps in `metadata` are additive and ignorable by a strict peer:
+things crittertown keeps in `metadata` are additive and ignorable by a strict peer:
 
-    metadata.clawcrew = {"agentId", "crewId", "status", "kind", "reviewedBy"}
+    metadata.crittertown = {"agentId", "crewId", "status", "kind", "reviewedBy"}
 
 that is deliberate: review state travels with the message, but a peer that only
 understands the spec still reads a valid `Message` or `Task`.
@@ -126,7 +126,7 @@ def from_parts(parts: Any) -> str:
 # ---- message -----------------------------------------------------------
 def message_to_json(row: dict, role: str = ROLE_AGENT) -> dict:
     metadata = {
-        "clawcrew": {
+        "crittertown": {
             "agentId": row.get("from_agent_id"),
             "crewId": row.get("team_id"),
             "status": row.get("status"),
@@ -136,7 +136,7 @@ def message_to_json(row: dict, role: str = ROLE_AGENT) -> dict:
         }
     }
     if row.get("review_note"):
-        metadata["clawcrew"]["reviewNote"] = row["review_note"]
+        metadata["crittertown"]["reviewNote"] = row["review_note"]
     payload = {
         "kind": "message",
         "messageId": row["id"],
@@ -153,7 +153,7 @@ def message_to_json(row: dict, role: str = ROLE_AGENT) -> dict:
 def message_from_json(payload: dict) -> dict:
     """read an inbound a2a Message into the fields our bus needs.
 
-    sender identity travels in `metadata.clawcrew.agentId` because a2a's `role`
+    sender identity travels in `metadata.crittertown.agentId` because a2a's `role`
     only says client or server, not which agent. without it we cannot attribute
     the message, and an unattributable message cannot be reviewed.
     """
@@ -163,18 +163,18 @@ def message_from_json(payload: dict) -> dict:
         raise ValidationError("expected a Message, got kind=" + str(payload.get("kind")))
     body = from_parts(payload.get("parts"))
     metadata = payload.get("metadata") or {}
-    claw = metadata.get("clawcrew") or {}
-    sender = claw.get("agentId") or metadata.get("agentId")
+    ext = metadata.get("crittertown") or {}
+    sender = ext.get("agentId") or metadata.get("agentId")
     if not sender:
         raise ValidationError(
-            "inbound message needs metadata.clawcrew.agentId so it can be attributed and reviewed"
+            "inbound message needs metadata.crittertown.agentId so it can be attributed and reviewed"
         )
     return {
         "from_agent_id": sender,
-        "to_agent_id": claw.get("toAgentId"),
-        "task_id": payload.get("taskId") or claw.get("taskId"),
+        "to_agent_id": ext.get("toAgentId"),
+        "task_id": payload.get("taskId") or ext.get("taskId"),
         "thread_id": payload.get("contextId") or payload.get("threadId") or None,
-        "kind": claw.get("kind") or "note",
+        "kind": ext.get("kind") or "note",
         "body": body,
         "message_id": payload.get("messageId"),
         "role": normalize_role(payload.get("role")),
@@ -200,7 +200,7 @@ def task_to_json(task: dict, messages: list[dict] | None = None) -> dict:
         "artifacts": _artifacts(task),
         "history": [message_to_json(m) for m in messages],
         "metadata": {
-            "clawcrew": {
+            "crittertown": {
                 "crewId": task["team_id"],
                 "column": task["column"],
                 "agentId": task.get("assignee_agent_id"),
@@ -265,13 +265,13 @@ def agent_card(
         ],
         "url": url,  # v0.3 carries the endpoint here
         "preferredTransport": PROTOCOL_BINDING,  # v0.3 transport selector
-        "provider": {"organization": "clawcrew", "url": "https://github.com/clawcrew"},
+        "provider": {"organization": "crittertown", "url": "https://github.com/crittertown"},
         "capabilities": {
             "streaming": False,
             "pushNotifications": False,
             "extensions": [
                 {
-                    "uri": "https://clawcrew.dev/extensions/review-gate",
+                    "uri": "https://crittertown.dev/extensions/review-gate",
                     "description": "messages are held pending review when the crew review mode is 'reviewed'",
                     "required": False,
                     "params": {"reviewMode": review_mode},
@@ -281,7 +281,7 @@ def agent_card(
         "defaultInputModes": DEFAULT_INPUT_MODES,
         "defaultOutputModes": DEFAULT_OUTPUT_MODES,
         "skills": skills,
-        "metadata": {"clawcrew": {"agentId": agent["id"], "crewId": crew["id"]}},
+        "metadata": {"crittertown": {"agentId": agent["id"], "crewId": crew["id"]}},
     }
 
 
@@ -318,7 +318,7 @@ WIRE_KINDS = ("agent_card", "message", "task")
 
 def validate_wire(kind: str, payload: dict) -> dict:
     """round trip a payload through the a2a models vendored from the official sdk
-    (`clawcrew/vendor/a2a_types`, generated from `specification/json/a2a.json`).
+    (`crittertown/vendor/a2a_types`, generated from `specification/json/a2a.json`).
 
     a protocol layer that only agrees with itself is worthless, so this is the check
     that keeps the wire format honest: if the vendored models reject a payload we

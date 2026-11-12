@@ -6,7 +6,7 @@ someone published, a prompt in a git repo - all of those are agents, and refusin
 because they were not typed into this api is the kind of lock-in that makes a platform
 not worth adopting.
 
-so: read the format, produce one **manifest** (clawcrew's own portable description of an
+so: read the format, produce one **manifest** (crittertown's own portable description of an
 agent), then adopt it. the manifest is the only thing adoption understands, which means
 adding a format never touches the adoption path and exporting an agent is free.
 
@@ -17,9 +17,9 @@ formats read here:
     crewai            agents.yaml or json entries (role, goal, backstory, tools, llm)
     a2a               an a2a agent card json (name, description, skills, capabilities)
     openai            an assistants style object (name, instructions, model, tools)
-    clawcrew          our own manifest, so import and export are the same shape
+    crittertown          our own manifest, so import and export are the same shape
 
-what is deliberately not invented: a tool name a format has and clawcrew has no
+what is deliberately not invented: a tool name a format has and crittertown has no
 equivalent for stays in `unmapped` and shows up as a warning. a silent drop is how an
 imported agent ends up with permissions nobody chose.
 """
@@ -40,7 +40,7 @@ SOURCE_OPENCLAW = "openclaw"
 SOURCE_CREWAI = "crewai"
 SOURCE_A2A = "a2a"
 SOURCE_OPENAI = "openai-assistant"
-SOURCE_CLAWCREW = "clawcrew"
+SOURCE_CRITTERTOWN = "crittertown"
 
 AGENT_SOURCES = {
     SOURCE_CLAUDE_CODE: "markdown + yaml frontmatter (.claude/agents/*.md style)",
@@ -48,7 +48,7 @@ AGENT_SOURCES = {
     SOURCE_CREWAI: "agents.yaml or agents.json entries (role, goal, backstory, tools, llm)",
     SOURCE_A2A: "an a2a agent card json",
     SOURCE_OPENAI: "an assistants style json object",
-    SOURCE_CLAWCREW: "a clawcrew agent manifest, which is also what export writes",
+    SOURCE_CRITTERTOWN: "a crittertown agent manifest, which is also what export writes",
 }
 
 DOC_NAMES = {name.upper(): label for name, label in {
@@ -374,11 +374,11 @@ def from_openai(payload: Any) -> AgentManifest:
     return manifest
 
 
-def from_clawcrew(payload: Any) -> AgentManifest:
+def from_crittertown(payload: Any) -> AgentManifest:
     if isinstance(payload, str):
         payload = json.loads(payload)
     if not isinstance(payload, dict) or not payload.get("name"):
-        raise ValidationError("a clawcrew manifest needs a name")
+        raise ValidationError("a crittertown manifest needs a name")
     return AgentManifest(
         name=str(payload["name"]),
         role=str(payload.get("role") or ""),
@@ -392,7 +392,7 @@ def from_clawcrew(payload: Any) -> AgentManifest:
         runtime=dict(payload.get("runtime") or {}),
         channels=_as_list(payload.get("channels")),
         metadata=dict(payload.get("metadata") or {}),
-        source=SOURCE_CLAWCREW,
+        source=SOURCE_CRITTERTOWN,
     )
 
 
@@ -501,7 +501,7 @@ def detect(payload: Any) -> str:
     producing an agent with an empty prompt."""
     if isinstance(payload, dict):
         if str(payload.get("kind") or "").lower() == "agent" and "instructions" in payload:
-            return SOURCE_CLAWCREW
+            return SOURCE_CRITTERTOWN
         nested = payload.get("agents") or payload.get("crews") or payload.get("agents_config")
         if isinstance(nested, dict) and nested:
             sample = next((value for value in nested.values() if isinstance(value, dict)), None)
@@ -562,8 +562,8 @@ def import_agent(ref: Any, source: str = "", fetcher=None, agent_name: str = "")
         return from_a2a(payload)
     if chosen == SOURCE_OPENAI:
         return from_openai(payload)
-    if chosen == SOURCE_CLAWCREW:
-        return from_clawcrew(payload)
+    if chosen == SOURCE_CRITTERTOWN:
+        return from_crittertown(payload)
     raise ValidationError(f"unknown agent source '{chosen}'", formats=sorted(AGENT_SOURCES))
 
 
@@ -591,9 +591,9 @@ def export_agent(agent: dict, profile: dict | None = None) -> dict:
         approval={"permissions": dict(scope.get("permissions") or {})},
         runtime=dict(agent.get("runtime") or {}),
         channels=_as_list(scope.get("channels")),
-        metadata={"origin": "clawcrew", "agent_id": agent["id"],
+        metadata={"origin": "crittertown", "agent_id": agent["id"],
                   "team_id": agent["team_id"], "status": agent.get("status", "")},
-        source=SOURCE_CLAWCREW,
+        source=SOURCE_CRITTERTOWN,
     ).to_dict()
 
 

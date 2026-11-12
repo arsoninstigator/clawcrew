@@ -10,6 +10,6 @@
   A2ABaseModel`, and the base module moved next to it, so the line is now
   `from ._base import A2ABaseModel`. nothing else was touched.
 
-used by `clawcrew/a2a_protocol.py:validate_wire`, which round trips every outbound
+used by `crittertown/a2a_protocol.py:validate_wire`, which round trips every outbound
 message, task and agent card through these models so the protocol layer cannot drift
 from the published schema.

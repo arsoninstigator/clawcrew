@@ -37,7 +37,7 @@ class LocalProvider(BaseProvider):
     isolated = False
 
     def __init__(self, root: str = ""):
-        self.root = root or os.path.join(tempfile.gettempdir(), "clawcrew-local")
+        self.root = root or os.path.join(tempfile.gettempdir(), "crittertown-local")
         os.makedirs(self.root, exist_ok=True)
 
     def configured(self) -> bool:
@@ -85,7 +85,7 @@ class LocalProvider(BaseProvider):
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env={**os.environ, "CLAWCREW_SANDBOX": handle.ref},
+                env={**os.environ, "CRITTERTOWN_SANDBOX": handle.ref},
             )
         except subprocess.TimeoutExpired:
             return ExecResult(

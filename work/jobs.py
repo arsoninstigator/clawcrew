@@ -1,8 +1,8 @@
 """compatibility shim.
 
-the schedule entrypoint now lives in `clawcrew/work/schedule/jobs.py`, next to the
+the schedule entrypoint now lives in `crittertown/work/schedule/jobs.py`, next to the
 scheduler it drains. this module stays because a deployed schedule worker already
-points `-A clawcrew.jobs` at it. there is one implementation, and it is not this file.
+points `-A crittertown.jobs` at it. there is one implementation, and it is not this file.
 """
 
 from ingredients.schedule.jobs import (  # noqa: F401 - re-exported on purpose

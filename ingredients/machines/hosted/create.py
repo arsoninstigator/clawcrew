@@ -1,6 +1,6 @@
-"""create one hosted sandbox from the command line, for `clawcrew get --apply`.
+"""create one hosted sandbox from the command line, for `crittertown get --apply`.
 
-    python -m clawcrew.create.ingredients.machines.hosted.create --name box --template hosted/desktop
+    python -m ingredients.machines.hosted.create --name box --template hosted/desktop
 """
 
 from __future__ import annotations
@@ -10,12 +10,12 @@ import json
 
 from core.config import Settings
 from sandbox import build_registry
-from core.errors import ClawCrewError
+from core.errors import CritterTownError
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hosted_create")
-    parser.add_argument("--name", default="clawcrew-1")
+    parser.add_argument("--name", default="crittertown-1")
     parser.add_argument("--template", default="")
     args = parser.parse_args(argv)
 
@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     provider = build_registry(settings).get("hosted")
     try:
         handle = provider.ensure(args.name, {"name": args.name, "template": args.template})
-    except ClawCrewError as exc:
+    except CritterTownError as exc:
         print(json.dumps(exc.to_dict(), indent=2))
         return 1
     print(json.dumps({"handle": handle.to_dict()}, indent=2))

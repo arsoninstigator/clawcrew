@@ -1,13 +1,13 @@
 """command line.
 
-    clawcrew seed            create the demo crew and print what it made
-    clawcrew inspect         counts + review queue
-    clawcrew dispatch <id>   run one task now
-    clawcrew tick            enqueue anything due
-    clawcrew work [--limit]  drain the queue
-    clawcrew serve [--port]  run the http api
-    clawcrew demo            seed + dispatch + review, end to end, no network
-    clawcrew comms <verb>    keys, rooms, bridges and sync for the signed log
+    crittertown seed            create the demo crew and print what it made
+    crittertown inspect         counts + review queue
+    crittertown dispatch <id>   run one task now
+    crittertown tick            enqueue anything due
+    crittertown work [--limit]  drain the queue
+    crittertown serve [--port]  run the http api
+    crittertown demo            seed + dispatch + review, end to end, no network
+    crittertown comms <verb>    keys, rooms, bridges and sync for the signed log
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import os
 
 from core.app import build_app
 from core.config import Settings
-from core.errors import ClawCrewError
+from core.errors import CritterTownError
 
 
 def _app(args: argparse.Namespace):
@@ -74,7 +74,7 @@ def cmd_seed(args: argparse.Namespace) -> int:
         "crew": crew["id"],
         "agents": [a["id"] for a in app.crews.list_agents(crew["id"])],
         "workflow": workflow["id"],
-        "task_example": "clawcrew dispatch <task_id>",
+        "task_example": "crittertown dispatch <task_id>",
     }, indent=2))
     return 0
 
@@ -168,7 +168,7 @@ def cmd_comms(args: argparse.Namespace) -> int:
         agent = app.store.one("select id, name from agents where id = ? or name = ?",
                               (args.agent, args.agent))
         if not agent:
-            raise ClawCrewError(f"agent {args.agent} not found")
+            raise CritterTownError(f"agent {args.agent} not found")
         identity = app.comms.identity(agent["id"])
         print(json.dumps({"agent": agent["name"], **identity}, indent=2))
         return 0
@@ -177,7 +177,7 @@ def cmd_comms(args: argparse.Namespace) -> int:
             agent = app.store.one("select id from agents where id = ? or name = ?",
                                   (agent_id, agent_id))
             if not agent:
-                raise ClawCrewError(f"agent {agent_id} not found")
+                raise CritterTownError(f"agent {agent_id} not found")
             app.comms.add_member(args.room, agent["id"], "agent", args.role)
         print(json.dumps({"room": args.room, "members": app.comms.members(args.room)}, indent=2))
         return 0
@@ -206,7 +206,7 @@ def cmd_comms(args: argparse.Namespace) -> int:
     if verb == "sync":
         print(json.dumps(app.comms.sync(args.room, args.transport), indent=2))
         return 0
-    raise ClawCrewError(f"unknown comms verb {verb}")
+    raise CritterTownError(f"unknown comms verb {verb}")
 
 
 def cmd_import_agent(args: argparse.Namespace) -> int:
@@ -256,7 +256,7 @@ def cmd_attest(args: argparse.Namespace) -> int:
         print(json.dumps(attest.verify_entries(bundle.get("entries") or []), indent=2))
         return 0
     if not args.agent_id:
-        raise ClawCrewError("pass an agent id, or --verify <bundle.json>")
+        raise CritterTownError("pass an agent id, or --verify <bundle.json>")
     print(json.dumps(app.audit.export(args.agent_id), indent=2))
     return 0
 
@@ -305,17 +305,23 @@ def cmd_browser(args: argparse.Namespace) -> int:
     return 0
 
 
+# uvicorn takes the app as an import string, so a wrong module here fails only when a
+# person runs `crittertown serve`, and never in the suite. test_boundaries imports
+# this constant so the path cannot rot again.
+SERVE_TARGET = "api.routes:create_api"
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
-    os.environ.setdefault("CLAWCREW_DB", args.db or "clawcrew.db")
-    uvicorn.run("clawcrew.api:create_api", factory=True, host=args.host, port=args.port, reload=args.reload)
+    os.environ.setdefault("CRITTERTOWN_DB", args.db or "crittertown.db")
+    uvicorn.run(SERVE_TARGET, factory=True, host=args.host, port=args.port, reload=args.reload)
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="clawcrew", description="agent crews with computers and workflows")
-    parser.add_argument("--db", help="sqlite path (default $CLAWCREW_DB or clawcrew.db)")
+    parser = argparse.ArgumentParser(prog="crittertown", description="agent crews with computers and workflows")
+    parser.add_argument("--db", help="sqlite path (default $CRITTERTOWN_DB or crittertown.db)")
     parser.add_argument("--dry-run", action="store_true", help="use the deterministic model, no llm calls")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -413,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except ClawCrewError as exc:
+    except CritterTownError as exc:
         print(json.dumps(exc.to_dict(), indent=2))
         return 1
 

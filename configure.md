@@ -8,26 +8,26 @@ change what you need, and the same image runs anywhere.
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_DB` | `clawcrew.db` | sqlite file. the queue, the boards, the audit chain and the credential grants all live here |
-| `CLAWCREW_API_TOKEN` | unset | shared bearer token. unset means open, which is fine on localhost and wrong on a network |
-| `CLAWCREW_PUBLIC_BASE_URL` | unset | the host approval links are built against. without it a link points at `localhost` |
-| `CLAWCREW_GATE_SECRET` | generated per db | signs approval links. set it once and keep it, or old links die on restart |
-| `CLAWCREW_GATE_TTL_HOURS` | `168` | how long an approval link stays valid |
-| `CLAWCREW_BRIEF_START` `CLAWCREW_BRIEF_END` | `18` `6` | the window the morning brief reads |
-| `CLAWCREW_REVIEW_MODE` | `reviewed` | default review mode for new crews |
-| `CLAWCREW_MAX_PARALLEL` | `4` | concurrent dispatches per `dispatch_ready` |
-| `CLAWCREW_SANDBOX_TIMEOUT` | `900` | hard ceiling for one command, in seconds |
+| `CRITTERTOWN_DB` | `crittertown.db` | sqlite file. the queue, the boards, the audit chain and the credential grants all live here |
+| `CRITTERTOWN_API_TOKEN` | unset | shared bearer token. unset means open, which is fine on localhost and wrong on a network |
+| `CRITTERTOWN_PUBLIC_BASE_URL` | unset | the host approval links are built against. without it a link points at `localhost` |
+| `CRITTERTOWN_GATE_SECRET` | generated per db | signs approval links. set it once and keep it, or old links die on restart |
+| `CRITTERTOWN_GATE_TTL_HOURS` | `168` | how long an approval link stays valid |
+| `CRITTERTOWN_BRIEF_START` `CRITTERTOWN_BRIEF_END` | `18` `6` | the window the morning brief reads |
+| `CRITTERTOWN_REVIEW_MODE` | `reviewed` | default review mode for new crews |
+| `CRITTERTOWN_MAX_PARALLEL` | `4` | concurrent dispatches per `dispatch_ready` |
+| `CRITTERTOWN_SANDBOX_TIMEOUT` | `900` | hard ceiling for one command, in seconds |
 
 ## the model
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_LLM_BASE_URL` | unset | any openai-compatible endpoint. unset switches runs onto the deterministic model |
-| `CLAWCREW_LLM_API_KEY` | unset | key for that endpoint |
-| `CLAWCREW_LLM_MODEL` | `gpt-4.1-mini` | model name to send |
-| `CLAWCREW_BROKER` | `inproc` | `inproc` for one process, `schedule` for a cluster |
+| `CRITTERTOWN_LLM_BASE_URL` | unset | any openai-compatible endpoint. unset switches runs onto the deterministic model |
+| `CRITTERTOWN_LLM_API_KEY` | unset | key for that endpoint |
+| `CRITTERTOWN_LLM_MODEL` | `gpt-4.1-mini` | model name to send |
+| `CRITTERTOWN_BROKER` | `inproc` | `inproc` for one process, `schedule` for a cluster |
 | `SCHEDULE_BROKER_URL` | unset | redis or rabbitmq when the broker is schedule |
-| `SCHEDULE_QUEUE` | `clawcrew` | the queue name a worker drains |
+| `SCHEDULE_QUEUE` | `crittertown` | the queue name a worker drains |
 
 ## compute
 
@@ -36,12 +36,12 @@ sandbox that lasts one task, hosted is somebody else's runtime when you opt in.
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_ALLOW_LOCAL_FALLBACK` | `true` | `false` turns a missing provider key into an error instead of a local shell |
+| `CRITTERTOWN_ALLOW_LOCAL_FALLBACK` | `true` | `false` turns a missing provider key into an error instead of a local shell |
 | `PERSISTENT_MODE` | `local` | `local` runs the persistent runtime on this machine, `cloud` is their hosted api |
 | `PERSISTENT_BIN` | `persistent` | the binary `local` mode drives |
 | `PERSISTENT_API_KEY` | unset | the key for `cloud` mode |
 | `PERSISTENT_BASE_URL` | their api | override only for your own deployment |
-| `PERSISTENT_IMAGE` | `clawcrew/persistent:latest` | default image for a new computer |
+| `PERSISTENT_IMAGE` | `crittertown/persistent:latest` | default image for a new computer |
 | `EPHEMERAL_BASE_URL` | `http://localhost:3000` | your instance's api |
 | `EPHEMERAL_API_KEY` | unset | the key your deployment generates |
 | `EPHEMERAL_TEMPLATE` | `base` | default template for a new sandbox |
@@ -52,7 +52,7 @@ sandbox that lasts one task, hosted is somebody else's runtime when you opt in.
 
 the sandbox lifecycle runs on the vendored client in `vendor/`. commands inside an
 ephemeral sandbox do not: they go over envd, which only the upstream python sdk
-implements, so `pip install "clawcrew[ephemeral]"` is what makes exec work. without it
+implements, so `pip install "crittertown[ephemeral]"` is what makes exec work. without it
 the adapter refuses with that hint instead of inventing a route.
 
 ## browser
@@ -61,10 +61,10 @@ no account and no key: a driver over cdp, and a chromium you run yourself.
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_BROWSER_PROVIDER` | `local-browser` | `local-browser`, `container-browser`, or `none` to give an agent no browser |
-| `CLAWCREW_BROWSER_CDP` | unset | attach to a browser you already started |
-| `CLAWCREW_CONTAINER_BROWSER_IMAGE` | unset | the chromium image container-browser starts |
-| `CLAWCREW_BROWSER_PROFILE_ROOT` | unset | where profiles and downloads live |
+| `CRITTERTOWN_BROWSER_PROVIDER` | `local-browser` | `local-browser`, `container-browser`, or `none` to give an agent no browser |
+| `CRITTERTOWN_BROWSER_CDP` | unset | attach to a browser you already started |
+| `CRITTERTOWN_CONTAINER_BROWSER_IMAGE` | unset | the chromium image container-browser starts |
+| `CRITTERTOWN_BROWSER_PROFILE_ROOT` | unset | where profiles and downloads live |
 
 ## the board
 
@@ -72,8 +72,8 @@ no account and no key: a driver over cdp, and a chromium you run yourself.
 own key so its work is attributed to it.
 
 ```sh
-CLAWCREW_MANAGE_BASE_URL=http://localhost:4000   # the api origin of your instance
-CLAWCREW_MANAGE_API_KEY=                         # an external agent's key, from its page
+CRITTERTOWN_MANAGE_BASE_URL=http://localhost:4000   # the api origin of your instance
+CRITTERTOWN_MANAGE_API_KEY=                         # an external agent's key, from its page
 ```
 
 create the agent in the instance, give it a role and a project, copy its key. the bridge is
@@ -86,8 +86,8 @@ guessing.
 a flow is a service, not a workflow node: an agent calls it by id when it wants one.
 
 ```sh
-CLAWCREW_WORKFLOWS_BASE_URL=http://localhost:7860  # a workflows instance you run
-CLAWCREW_WORKFLOWS_API_KEY=
+CRITTERTOWN_WORKFLOWS_BASE_URL=http://localhost:7860  # a workflows instance you run
+CRITTERTOWN_WORKFLOWS_API_KEY=
 ```
 
 ## toolbox
@@ -97,9 +97,9 @@ round. both are called on your own instance; neither is copied.
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_N8N_BASE_URL` `CLAWCREW_N8N_API_KEY` | unset | a node can post to your n8n, and its exports import |
-| `CLAWCREW_DIFY_BASE_URL` `CLAWCREW_DIFY_API_KEY` `CLAWCREW_DIFY_USER` | unset | a node can run your dify workflow, and its exports import |
-| `CLAWCREW_FIRECRAWL_API_KEY` `CLAWCREW_FIRECRAWL_BASE_URL` | unset | the worked example: an agent scrapes, crawls or maps a site through your key |
+| `CRITTERTOWN_N8N_BASE_URL` `CRITTERTOWN_N8N_API_KEY` | unset | a node can post to your n8n, and its exports import |
+| `CRITTERTOWN_DIFY_BASE_URL` `CRITTERTOWN_DIFY_API_KEY` `CRITTERTOWN_DIFY_USER` | unset | a node can run your dify workflow, and its exports import |
+| `CRITTERTOWN_FIRECRAWL_API_KEY` `CRITTERTOWN_FIRECRAWL_BASE_URL` | unset | the worked example: an agent scrapes, crawls or maps a site through your key |
 
 ## credentials
 
@@ -117,14 +117,14 @@ variables and the credential routes say so instead of pretending.
 
 | var | default | what it does |
 | --- | --- | --- |
-| `CLAWCREW_COMMS_CUSTODY` | `local` | `local` mints and holds each agent's key here; `external` stores public halves only |
-| `CLAWCREW_COMMS_HUMANS` | `false` | agents are the only first class members of a room unless this is on |
-| `CLAWCREW_COMMS_RELAY` | unset | a relay every new room is bridged to; empty means local rooms only |
-| `CLAWCREW_COMMS_RELAY_TRANSPORT` | `nostr` | the transport for that bridge |
-| `CLAWCREW_COMMS_LIMIT` | `200` | page size when reading a room |
+| `CRITTERTOWN_COMMS_CUSTODY` | `local` | `local` mints and holds each agent's key here; `external` stores public halves only |
+| `CRITTERTOWN_COMMS_HUMANS` | `false` | agents are the only first class members of a room unless this is on |
+| `CRITTERTOWN_COMMS_RELAY` | unset | a relay every new room is bridged to; empty means local rooms only |
+| `CRITTERTOWN_COMMS_RELAY_TRANSPORT` | `nostr` | the transport for that bridge |
+| `CRITTERTOWN_COMMS_LIMIT` | `200` | page size when reading a room |
 
 ## not configuration
 
-licences and provenance for the vendored clients are in `clawcrew/thirdparty.md`, the
-schema and deployment story is in `clawcrew/docs/backend.md`, and the words are in
-`clawcrew/glossary.md`.
+licences and provenance for the vendored clients are in `crittertown/thirdparty.md`, the
+schema and deployment story is in `crittertown/docs/backend.md`, and the words are in
+`crittertown/glossary.md`.

@@ -258,7 +258,7 @@ class ScheduleBroker(Broker):
 
     name = "schedule"
 
-    def __init__(self, store: Store, broker_url: str, queue: str = "clawcrew"):
+    def __init__(self, store: Store, broker_url: str, queue: str = "crittertown"):
         self.store = store
         self.broker_url = broker_url
         self.queue = queue
@@ -269,19 +269,19 @@ class ScheduleBroker(Broker):
             from celery import Celery  # type: ignore
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ProviderNotConfigured(
-                "the broker is not installed; pip install 'clawcrew[schedule]' "
-                "or use CLAWCREW_BROKER=inproc",
+                "the broker is not installed; pip install 'crittertown[schedule]' "
+                "or use CRITTERTOWN_BROKER=inproc",
                 provider="schedule",
-                hint='pip install "clawcrew[schedule]"',
+                hint='pip install "crittertown[schedule]"',
             ) from exc
-        app = Celery("clawcrew", broker=self.broker_url)
+        app = Celery("crittertown", broker=self.broker_url)
         app.conf.task_default_queue = self.queue
         return app
 
     def enqueue(self, kind: str, payload: dict, delay: float = 0.0) -> str:
         job_id = self._fallback.enqueue(kind, payload, delay)  # durable record always
         app = self._app()
-        app.send_task("clawcrew.jobs.run_job", args=[job_id], countdown=max(0, int(delay)))
+        app.send_task("crittertown.jobs.run_job", args=[job_id], countdown=max(0, int(delay)))
         return job_id
 
     def dequeue(self, limit: int = 1) -> list[Job]:

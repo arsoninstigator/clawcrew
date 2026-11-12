@@ -6,12 +6,12 @@ there are two, and they are different on purpose.
 `?room=&since=`, and that is the entire contract, so a gateway for any IM product
 - octo-channel-gateway, a slack bridge, a queue, an ando-style client - is a
 shim the operator writes in their own stack, in their own language, without
-touching clawcrew. the contract is ours and it is stable, so a bridge cannot be
+touching crittertown. the contract is ours and it is stable, so a bridge cannot be
 half-broken by a change here.
 
 `nostr` is the interoperable one. it speaks nip-01 at a relay: EVENT to publish,
 REQ to read, and the events are the same signed events this module already
-stores. that is what makes a clawcrew room readable by `relay`, by any nip-29
+stores. that is what makes a crittertown room readable by `relay`, by any nip-29
 client, or by a relay the operator runs themselves. nothing about the agent
 identity changes when it crosses that boundary, which is the point: the same
 key, the same signature, a different server.
@@ -30,11 +30,11 @@ from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
-from core.errors import ClawCrewError, ProviderNotConfigured, ValidationError
+from core.errors import CritterTownError, ProviderNotConfigured, ValidationError
 from comms.events import Event
 
 
-class TransportError(ClawCrewError):
+class TransportError(CritterTownError):
     """the far end answered badly, or not at all."""
 
     code = "transport_error"
@@ -231,7 +231,7 @@ class NostrTransport(Transport):
 
     def pull(self, room_id: str, since: int = 0, limit: int = 50) -> list[Event]:
         connection = self._open()
-        subscription = f"clawcrew-{int(time.time())}"
+        subscription = f"crittertown-{int(time.time())}"
         events: list[Event] = []
         try:
             connection.send(json.dumps(self.request_frame(subscription, room_id, since=since, limit=limit)))

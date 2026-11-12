@@ -1,13 +1,13 @@
 # vendored code
 
 these three packages are copies of permissively licensed upstream code, committed
-here so clawcrew runs without shipping its own reimplementation of someone else's
+here so crittertown runs without shipping its own reimplementation of someone else's
 wire contract. nothing in this directory is ours: each package keeps its upstream
 `LICENSE` and a `PROVENANCE.md` naming the repository, the commit and the files.
 
 the directory name is ours and says what the thing is for (`persistent_cloud_api`,
 `ephemeral_cloud_api`, `a2a_types`); the upstream project is named inside
-`PROVENANCE.md` and in `clawcrew/thirdparty.md`. every import inside a vendored package
+`PROVENANCE.md` and in `crittertown/thirdparty.md`. every import inside a vendored package
 is relative, so a rename touches no file's contents.
 
 | package | upstream | licence | what it is |
@@ -35,6 +35,6 @@ lives behind `pip install -e ".[e2b]"`.
   in that package's `PROVENANCE.md`.
 - the only accepted local change is an import rewrite required by the move (see
   `a2a_types/PROVENANCE.md`); anything else means the file is not vendored code any
-  more and belongs in `clawcrew/`.
+  more and belongs in `crittertown/`.
 - tests in `tests/test_adapters.py` and `tests/test_a2a_protocol.py` drive the real
   generated code through an `httpx.MockTransport`, so a bad re-copy fails the suite.

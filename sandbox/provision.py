@@ -1,11 +1,11 @@
-"""provisioning, native to clawcrew.
+"""provisioning, native to crittertown.
 
-`clawcrew get persistent` and `clawcrew get disposable` should work from a laptop, a
+`crittertown get persistent` and `crittertown get disposable` should work from a laptop, a
 vps, a bare metal box, or a cloud account, and they should never surprise anyone
 with a bill. so every target answers the same question the same way:
 
 1. **plan** - a list of steps you can read: files to write, commands to run. this is
-   the default. `clawcrew get persistent` prints it and stops.
+   the default. `crittertown get persistent` prints it and stops.
 2. **apply** - only with `--apply`, and only through `runner`, so a test can prove
    what would run without running it.
 
@@ -40,12 +40,12 @@ def _terraform(provider: str, spec: dict) -> tuple[str, str]:
     region = spec["region"]
     machine = spec.get("machine", "small")
     if provider == "aws":
-        return f"aws_{region}_{machine}", f"""# clawcrew persistent computer on aws, in your account, in your state file.
+        return f"aws_{region}_{machine}", f"""# crittertown persistent computer on aws, in your account, in your state file.
 provider "aws" {{ region = "{region}" }}
 
-resource "aws_security_group" "clawcrew" {{
-  name        = "clawcrew-{name}"
-  description = "clawcrew computer, no public ingress except ssh"
+resource "aws_security_group" "crittertown" {{
+  name        = "crittertown-{name}"
+  description = "crittertown computer, no public ingress except ssh"
   ingress {{ from_port = 22 to_port = 22 protocol = "tcp" cidr_blocks = ["0.0.0.0/0"] }}
   egress  {{ from_port = 0 to_port = 0 protocol = "-1" cidr_blocks = ["0.0.0.0/0"] }}
 }}
@@ -54,19 +54,19 @@ resource "aws_instance" "computer" {{
   ami                    = var.ami
   instance_type          = var.instance_type
   key_name               = var.key_name
-  vpc_security_group_ids = [aws_security_group.clawcrew.id]
+  vpc_security_group_ids = [aws_security_group.crittertown.id]
   user_data              = file("${{path.module}}/cloud-init.yaml")
-  tags = {{ Name = "clawcrew-{name}" }}
+  tags = {{ Name = "crittertown-{name}" }}
 }}
 
 output "host" {{ value = aws_instance.computer.public_ip }}
 """
     if provider == "gcp":
-        return f"gcp_{region}_{machine}", f"""# clawcrew computer on gcp
+        return f"gcp_{region}_{machine}", f"""# crittertown computer on gcp
 provider "google" {{ project = var.project region = "{region}" }}
 
 resource "google_compute_instance" "computer" {{
-  name         = "clawcrew-{name}"
+  name         = "crittertown-{name}"
   machine_type = "{machine}"
   zone         = var.zone
   boot_disk {{ initialize_params {{ image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64" }} }}
@@ -77,21 +77,21 @@ resource "google_compute_instance" "computer" {{
 output "host" {{ value = google_compute_instance.computer.network_interface[0].access_config[0].nat_ip }}
 """
     if provider == "azure":
-        return f"azure_{region}_{machine}", f"""# clawcrew computer on azure
+        return f"azure_{region}_{machine}", f"""# crittertown computer on azure
 provider "azurerm" {{ features {{}} }}
 
-resource "azurerm_resource_group" "clawcrew" {{
-  name     = "clawcrew-{name}"
+resource "azurerm_resource_group" "crittertown" {{
+  name     = "crittertown-{name}"
   location = "{region}"
 }}
 
 resource "azurerm_linux_virtual_machine" "computer" {{
-  name                = "clawcrew-{name}"
-  resource_group_name = azurerm_resource_group.clawcrew.name
-  location            = azurerm_resource_group.clawcrew.location
+  name                = "crittertown-{name}"
+  resource_group_name = azurerm_resource_group.crittertown.name
+  location            = azurerm_resource_group.crittertown.location
   size                = "{machine}"
   admin_username      = var.admin_username
-  network_interface_ids = [azurerm_network_interface.clawcrew.id]
+  network_interface_ids = [azurerm_network_interface.crittertown.id]
   admin_ssh_key {{ username = var.admin_username public_key = var.ssh_public_key }}
   os_disk {{ caching = "ReadWrite" storage_account_type = "Standard_LRS" }}
   source_image_reference {{
@@ -102,7 +102,7 @@ resource "azurerm_linux_virtual_machine" "computer" {{
 
 output "host" {{ value = azurerm_linux_virtual_machine.computer.public_ip_address }}
 """
-    return f"oci_{region}_{machine}", f"""# clawcrew computer on oracle cloud (always free tier shapes work here)
+    return f"oci_{region}_{machine}", f"""# crittertown computer on oracle cloud (always free tier shapes work here)
 provider "oci" {{ region = "{region}" }}
 
 resource "oci_core_instance" "computer" {{
@@ -125,8 +125,8 @@ package_update: true
 packages: [docker.io, curl, git]
 runcmd:
   - systemctl enable --now docker
-  - mkdir -p /opt/clawcrew
-  - docker run -d --restart=always --name clawcrew-computer -v /opt/clawcrew:/work \
+  - mkdir -p /opt/crittertown
+  - docker run -d --restart=always --name crittertown-computer -v /opt/crittertown:/work \
       {image} sleep infinity
 """
 
@@ -196,7 +196,7 @@ class Provisioner:
             raise ValidationError(f"kind must be one of {list(KINDS)}")
         spec = dict(spec or {})
         target = target or spec.get("target") or self.default_target(kind)
-        spec.setdefault("name", "clawcrew-demo")
+        spec.setdefault("name", "crittertown-demo")
         spec.setdefault("image", self.settings.persistent_default_image)
         spec.setdefault("region", self.default_region(target))
         builder = getattr(self, f"_plan_{target}", None)
@@ -275,7 +275,7 @@ class Provisioner:
         name = spec["name"]
         if self.settings.ephemeral_api_key:
             steps = [Step("exec", "create a firecracker sandbox through the ephemeral api",
-                          ["python", "-m", "clawcrew.create.ingredients.machines.ephemeral.create",
+                          ["python", "-m", "ingredients.machines.ephemeral.create",
                            "--template", self.settings.ephemeral_default_template])]
             notes = ["ephemeral api key found, so this uses your account, not your machine"]
         else:
@@ -299,7 +299,7 @@ class Provisioner:
             Step("exec", "install the hosted sdk (apache-2.0, pip)",
                  [module, "-m", "pip", "install", "--upgrade", "hosted"]),
             Step("exec", f"create the {kind} sandbox through their sdk",
-                 [module, "-m", "clawcrew.create.ingredients.machines.hosted.create",
+                 [module, "-m", "ingredients.machines.hosted.create",
                   "--name", name] + (["--template", spec["template"]]
                                      if spec.get("template") else [])),
         ]
@@ -324,7 +324,7 @@ class Provisioner:
             f"docker rm -f {name} || true",
             f"docker run -d --name {name}"
             + (" --restart=always" if kind == PERSISTENT else "")
-            + f" -v /opt/clawcrew/{name}:/work {spec['image']} sleep infinity",
+            + f" -v /opt/crittertown/{name}:/work {spec['image']} sleep infinity",
         ]
         steps = [Step("exec", f"put a {kind} computer on {user_host}",
                       ["ssh", "-o", "BatchMode=yes", user_host, " && ".join(remote)])]
@@ -337,7 +337,7 @@ class Provisioner:
 kind: Pod
 metadata:
   name: {name}
-  labels: {{ app: clawcrew, kind: {kind} }}
+  labels: {{ app: crittertown, kind: {kind} }}
 spec:
   restartPolicy: {"Always" if kind == PERSISTENT else "Never"}
   containers:
@@ -435,10 +435,10 @@ spec:
         record = {
             "provider": provider, "binaries": found, "env": env_found, "ready": ready,
             "connected_date": now(),
-            "next": (f"clawcrew get persistent --target {provider}"
+            "next": (f"crittertown get persistent --target {provider}"
                      if ready else
                      f"install what is missing ({', '.join(k for k, v in found.items() if not v)})"
-                     f" or set credentials, then run clawcrew connect {provider} again"),
+                     f" or set credentials, then run crittertown connect {provider} again"),
         }
         os.makedirs(self.state_dir, exist_ok=True)
         path = os.path.join(self.state_dir, f"connect-{provider}.json")

@@ -43,7 +43,7 @@ class WorkflowsClient:
             "self_hosted": True,
             "base_url": _root(self.base_url),
             "configured": self.configured(),
-            "needs": "CLAWCREW_WORKFLOWS_BASE_URL and CLAWCREW_WORKFLOWS_API_KEY (a workflows api key)",
+            "needs": "CRITTERTOWN_WORKFLOWS_BASE_URL and CRITTERTOWN_WORKFLOWS_API_KEY (a workflows api key)",
         }
 
     def _client(self) -> httpx.Client:

@@ -1,7 +1,9 @@
 # where things live
 
-the repository has four roots for things that come from outside, and one for the platform's
-own code. what separates them is who owns the thing, not what it does.
+the repository has four roots for things that come from outside, one for the platform's own
+code, and one shelf (`theidea/`) that is not code at all. what separates them is who owns the
+thing, not what it does. the town is the whole thing; a crew is a team inside it, and the
+place they talk is `basecamp` (see `crittertown/glossary.md`).
 
 ## the platform
 
@@ -21,7 +23,7 @@ api/           http routes
 ## ingredients (baked in)
 
 the platform runs these. they are named for what they do; the upstream project is named
-only in `clawcrew/thirdparty.md`.
+only in `crittertown/thirdparty.md`.
 
 ```
 ingredients/machines/persistent/      per agent computers that outlive a run
@@ -50,15 +52,27 @@ workbench/            where an agent composes its own steps out of toolbox entri
 infrastructure/       how the platform itself is deployed
 ```
 
+## theidea (not code)
+
+the shelf where the design is assembled in the open. nothing under it is imported, built or
+shipped, which is why it sits outside the four roots.
+
+```
+theidea/frankenstein/building-blocks/inspiration/   the blocks this is made of, and why
+theidea/frankenstein/building-blocks/expansion/     what it might grow into
+theidea/frankenstein/assembly/                      how the parts were welded into one thing
+theidea/beyond/readme.md                            what is not in this repo at all
+```
+
 ## the reading material
 
 ```
-clawcrew/glossary.md      every word this repo uses, defined
-clawcrew/concept/         the long form: how a crew is shaped and why
-clawcrew/docs/            backend notes, oss landscape, decisions, what is left
-clawcrew/selfhost.md      running it on your own metal
-clawcrew/thirdparty.md    the credits file: upstreams, licences, what was taken
-clawcrew/tests/           the suite
+crittertown/glossary.md      two lists: the words the api uses, then our own
+crittertown/concept/         the long form: how a crew is shaped and why
+crittertown/docs/            backend notes, oss landscape, decisions, what is left
+crittertown/selfhost.md      running it on your own metal
+crittertown/thirdparty.md    the credits file: upstreams, licences, what was taken
+crittertown/tests/           the suite
 get/                      one folder per way in: https, api, sdk, npm, mcp
 configure.md              every env var
 ```

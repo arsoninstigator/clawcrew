@@ -15,8 +15,8 @@ throwaway chrome that cannot touch the agent's computer, local-browser gives the
 way to think with it.
 
 there is no api key here and no default image name: a guessed image tag is worse than an
-explicit one, so `CLAWCREW_CONTAINER_BROWSER_IMAGE` names the image you built (or the
-published one), and `CLAWCREW_BROWSER_CDP` attaches to a browser you already started.
+explicit one, so `CRITTERTOWN_CONTAINER_BROWSER_IMAGE` names the image you built (or the
+published one), and `CRITTERTOWN_BROWSER_CDP` attaches to a browser you already started.
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ SETUP = (
     "container-browser is the open source browser image (apache-2.0). build it once:\n"
     "  git clone https://github.com/browser/container-browser\n"
     "  cd container-browser/images/chromium-headful && ./build-docker.sh\n"
-    "then set CLAWCREW_CONTAINER_BROWSER_IMAGE to the image you built, or "
-    "CLAWCREW_BROWSER_CDP to the cdp endpoint of a browser you started yourself"
+    "then set CRITTERTOWN_CONTAINER_BROWSER_IMAGE to the image you built, or "
+    "CRITTERTOWN_BROWSER_CDP to the cdp endpoint of a browser you started yourself"
 )
 
 

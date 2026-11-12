@@ -14,7 +14,7 @@ POV_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>clawcrew · pov</title>
+<title>crittertown · pov</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -41,7 +41,7 @@ POV_PAGE = """<!doctype html>
 </head>
 <body>
 <header>
-  <h1>clawcrew · pov</h1>
+  <h1>crittertown · pov</h1>
   <input id="crew" placeholder="crew id" size="24" />
   <input id="token" placeholder="api token (if set)" size="18" type="password" />
   <button id="load">load crew</button>
@@ -67,9 +67,9 @@ POV_PAGE = """<!doctype html>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-let crewId = localStorage.getItem("clawcrew.crew") || "";
+let crewId = localStorage.getItem("crittertown.crew") || "";
 $("crew").value = crewId;
-$("token").value = localStorage.getItem("clawcrew.token") || "";
+$("token").value = localStorage.getItem("crittertown.token") || "";
 
 function headers() {
   const token = $("token").value.trim();
@@ -85,8 +85,8 @@ const clock = (ts) => ts ? new Date(ts * 1000).toLocaleString() : "";
 
 async function loadCrew() {
   crewId = $("crew").value.trim();
-  localStorage.setItem("clawcrew.crew", crewId);
-  localStorage.setItem("clawcrew.token", $("token").value.trim());
+  localStorage.setItem("crittertown.crew", crewId);
+  localStorage.setItem("crittertown.token", $("token").value.trim());
   if (!crewId) return;
   $("status").textContent = "loading…";
   try {
@@ -146,7 +146,7 @@ GATE_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>clawcrew · approval</title>
+<title>crittertown · approval</title>
 <style>
   :root {{ color-scheme: dark; }}
   * {{ box-sizing: border-box; }}
@@ -167,7 +167,7 @@ GATE_PAGE = """<!doctype html>
 </head>
 <body>
 <div class="card">
-  <p class="kicker">clawcrew · {kicker}</p>
+  <p class="kicker">crittertown · {kicker}</p>
   <h1>{title}</h1>
   {body}
 </div>

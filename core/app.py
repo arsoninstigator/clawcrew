@@ -31,7 +31,7 @@ from core.config import Settings
 from agents.crews import CrewService
 from org.departments import DepartmentService
 from core.db import Store
-from core.errors import ClawCrewError
+from core.errors import CritterTownError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.orchestrator import CrewRunner
 from agents.pov import PovService
@@ -91,7 +91,7 @@ class App:
         for row in self.store.query("select id from shift_plans where enabled = 1 order by created_date"):
             try:
                 rolled.append(self.shifts.roll(row["id"]))
-            except ClawCrewError as exc:
+            except CritterTownError as exc:
                 rolled.append({"plan_id": row["id"], "error": str(exc)})
         return rolled
     scheduler: Scheduler

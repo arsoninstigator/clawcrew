@@ -1,8 +1,8 @@
 """compatibility shim.
 
-the scheduler now lives in `clawcrew/work/schedule/service.py`, next to the job kinds
+the scheduler now lives in `crittertown/work/schedule/service.py`, next to the job kinds
 it dispatches. this module stays because call sites and a deployed schedule entrypoint
-already import `clawcrew.scheduler`, and a rename is not worth breaking them. there is
+already import `crittertown.scheduler`, and a rename is not worth breaking them. there is
 one implementation, and it is not this file.
 """
 

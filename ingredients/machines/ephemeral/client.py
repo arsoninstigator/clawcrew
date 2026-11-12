@@ -1,7 +1,7 @@
 """ephemeral adapter: ephemeral sandboxes.
 
 the lifecycle runs on ephemeral's **generated** openapi client, vendored in
-`clawcrew/vendor/ephemeral_api` (MIT, source in ephemeral-dev/Ephemeral, `spec/openapi.yml`):
+`crittertown/vendor/ephemeral_api` (MIT, source in ephemeral-dev/Ephemeral, `spec/openapi.yml`):
 
     POST   /sandboxes                      NewSandbox -> Sandbox
     GET    /sandboxes/{id}                 SandboxDetail
@@ -14,7 +14,7 @@ connectrpc contract that ships in ephemeral's own sdk. that hop is not reimpleme
 this adapter uses the sdk when it is importable and refuses with a precise error when
 it is not, instead of inventing a route that does not exist.
 
-    pip install "clawcrew[ephemeral]"     # then EPHEMERAL_API_KEY=... works end to end
+    pip install "crittertown[ephemeral]"     # then EPHEMERAL_API_KEY=... works end to end
 
 persistence here is deliberately short: an ephemeral sandbox exists for one task and
 is killed in a `finally`. `pause` exists for when a task needs to survive a worker
@@ -55,7 +55,7 @@ def _sdk():
 
     the envd hop is a connectrpc contract that only the sdk implements, so the sdk is
     used rather than re-derived. its module name is the one place outside
-    `clawcrew/thirdparty.md` where an upstream project is named: a python import
+    `crittertown/thirdparty.md` where an upstream project is named: a python import
     cannot be aliased, and `EPHEMERAL_EXEC_MODULE` exists for a fork that renamed it.
     """
     for module in (os.environ.get("EPHEMERAL_EXEC_MODULE") or "e2b", "e2b_code_interpreter"):
@@ -113,7 +113,7 @@ class EphemeralProvider(BaseProvider):
             or spec.get("templateID")
             or self.template,
             "timeout": int(spec.get("ttl_seconds") or spec.get("timeout") or 900),
-            "metadata": {"clawcrew_key": key, **(spec.get("metadata") or {})},
+            "metadata": {"crittertown_key": key, **(spec.get("metadata") or {})},
         }
         env = spec.get("env") or spec.get("envVars") or spec.get("env_vars")
         if env:
@@ -235,7 +235,7 @@ class EphemeralProvider(BaseProvider):
             raise ProviderNotConfigured(
                 "exec in an ephemeral sandbox needs the ephemeral sdk (the command hop goes through envd)",
                 provider="ephemeral",
-                hint='pip install "clawcrew[ephemeral]"',
+                hint='pip install "crittertown[ephemeral]"',
             )
         started = time.time()
         try:
@@ -263,7 +263,7 @@ class EphemeralProvider(BaseProvider):
             raise ProviderNotConfigured(
                 "writing files into an ephemeral sandbox needs the ephemeral sdk",
                 provider="ephemeral",
-                hint='pip install "clawcrew[ephemeral]"',
+                hint='pip install "crittertown[ephemeral]"',
             )
         sandbox = sandbox_class.connect(handle.ref, api_key=self.api_key)
         sandbox.files.write(path, content)
@@ -275,7 +275,7 @@ class EphemeralProvider(BaseProvider):
             raise ProviderNotConfigured(
                 "reading files from an ephemeral sandbox needs the ephemeral sdk",
                 provider="ephemeral",
-                hint='pip install "clawcrew[ephemeral]"',
+                hint='pip install "crittertown[ephemeral]"',
             )
         sandbox = sandbox_class.connect(handle.ref, api_key=self.api_key)
         return sandbox.files.read(path)

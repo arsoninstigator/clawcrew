@@ -83,7 +83,7 @@ class LocalBrowserProvider(BrowserProvider):
         if scope != "persistent":
             return tempfile.mkdtemp(prefix="cc-browser-")
         root = getattr(self.settings, "browser_profile_root", "") or os.path.join(
-            tempfile.gettempdir(), "clawcrew-browsers"
+            tempfile.gettempdir(), "crittertown-browsers"
         )
         safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in key)[:80]
         path = os.path.join(root, safe)

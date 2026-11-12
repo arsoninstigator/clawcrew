@@ -69,7 +69,7 @@ class CommsService:
             raise NotFound(f"agent {agent_id} not found")
         if self.custody != "local":
             raise ProviderNotConfigured(
-                "comms custody is " + self.custody + ": keys are held externally and clawcrew "
+                "comms custody is " + self.custody + ": keys are held externally and crittertown "
                 "only stores public halves, so it cannot mint one"
             )
         keypair = keys.generate()

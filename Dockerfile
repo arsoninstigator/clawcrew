@@ -4,7 +4,7 @@
 from python:3.11-slim as platform
 
 WORKDIR /app
-ENV PYTHONUNBUFFERED=1 CLAWCREW_DB=/data/clawcrew.db
+ENV PYTHONUNBUFFERED=1 CRITTERTOWN_DB=/data/crittertown.db
 
 COPY pyproject.toml README.md ./
 # one line per package, because `COPY a b ./` copies their *contents* into the target and

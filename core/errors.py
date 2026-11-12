@@ -4,8 +4,8 @@ an http status, so clients never have to string-match messages."""
 from __future__ import annotations
 
 
-class ClawCrewError(Exception):
-    code = "clawcrew_error"
+class CritterTownError(Exception):
+    code = "crittertown_error"
     status = 400
 
     def __init__(self, message: str, **details):
@@ -17,33 +17,33 @@ class ClawCrewError(Exception):
         return {"error": self.code, "message": self.message, "details": self.details}
 
 
-class NotFound(ClawCrewError):
+class NotFound(CritterTownError):
     code = "not_found"
     status = 404
 
 
-class ValidationError(ClawCrewError):
+class ValidationError(CritterTownError):
     code = "validation_error"
     status = 422
 
 
-class Conflict(ClawCrewError):
+class Conflict(CritterTownError):
     code = "conflict"
     status = 409
 
 
-class NotAllowed(ClawCrewError):
+class NotAllowed(CritterTownError):
     code = "not_allowed"
     status = 403
 
 
-class ProviderNotConfigured(ClawCrewError):
+class ProviderNotConfigured(CritterTownError):
     """raised when a sandbox/scheduler backend has no credentials."""
 
     code = "provider_not_configured"
     status = 503
 
 
-class ProviderFailure(ClawCrewError):
+class ProviderFailure(CritterTownError):
     code = "provider_failure"
     status = 502

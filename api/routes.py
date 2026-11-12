@@ -1,7 +1,7 @@
 """http surface.
 
 one rule: the api holds no logic, it maps http onto the services and maps the
-`ClawCrewError` ladder onto status codes. anything that needs behaviour belongs in
+`CritterTownError` ladder onto status codes. anything that needs behaviour belongs in
 a service so the worker, the cli and tests all get it.
 
 groups:
@@ -36,7 +36,7 @@ from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from core.app import App, build_app
 from comms.events import Event
-from core.errors import ClawCrewError, NotFound, ValidationError
+from core.errors import CritterTownError, NotFound, ValidationError
 from agents.importers import SOURCES, import_workflow
 from manage.knowledge.service import ADAPTERS
 from api.pages import POV_PAGE, gate_page
@@ -45,7 +45,7 @@ from api.pages import POV_PAGE, gate_page
 def create_api(app: App | None = None) -> FastAPI:
     app = app or build_app()
     api = FastAPI(
-        title="clawcrew",
+        title="crittertown",
         version="0.1.0",
         description="agent crews with persistent computers, reviewable a2a, and visual workflows",
     )
@@ -59,13 +59,13 @@ def create_api(app: App | None = None) -> FastAPI:
         if not token or public or request.method == "OPTIONS":
             return await call_next(request)
         supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-        supplied = supplied or request.headers.get("x-clawcrew-token", "")
+        supplied = supplied or request.headers.get("x-crittertown-token", "")
         if supplied != token:
             return JSONResponse(status_code=401, content={"error": "unauthorized"})
         return await call_next(request)
 
-    @api.exception_handler(ClawCrewError)
-    async def _handle(request: Request, exc: ClawCrewError) -> JSONResponse:
+    @api.exception_handler(CritterTownError)
+    async def _handle(request: Request, exc: CritterTownError) -> JSONResponse:
         return JSONResponse(status_code=exc.status, content=exc.to_dict())
 
     def body(payload: Any) -> dict:
@@ -84,7 +84,7 @@ def create_api(app: App | None = None) -> FastAPI:
 
     @api.get("/services")
     def services() -> dict:
-        """the self-hosted tools clawcrew plugs into: your n8n, your dify."""
+        """the self-hosted tools crittertown plugs into: your n8n, your dify."""
         return {"services": app.services.status()}
 
     @api.post("/ops/tick")
@@ -213,7 +213,8 @@ def create_api(app: App | None = None) -> FastAPI:
                 persistence=data.get("persistence"),
             )
         return app.profile.spawn(
-            agent_id, data.get("name", ""), role=data.get("role", ""), task_id=data.get("task_id"),
+            agent_id, data.get("name", ""), role=data.get("role", ""), mode=data.get("mode"),
+            task_id=data.get("task_id"),
             vertical=data.get("vertical"), index=int(data.get("index") or 0),
             specializations=data.get("specializations"),
             persistence=data.get("persistence"),
@@ -771,18 +772,6 @@ def create_api(app: App | None = None) -> FastAPI:
     def set_spawn_policy(agent_id: str, payload: dict = Body(...)) -> dict:
         return app.profile.set_spawn_policy(agent_id, **body(payload))
 
-    @api.post("/agents/{agent_id}/spawn")
-    def spawn_subagent(agent_id: str, payload: dict = Body(...)) -> dict:
-        data = body(payload)
-        return app.profile.spawn(
-            agent_id,
-            name=data.get("name", ""),
-            role=data.get("role", ""),
-            mode=data.get("mode"),
-            task_id=data.get("task_id"),
-            vertical=data.get("vertical"),
-        )
-
     @api.get("/agents/{agent_id}/children")
     def agent_children(agent_id: str, include_retired: bool = False) -> dict:
         return {"children": app.profile.children(agent_id, include_retired=include_retired)}
@@ -1074,7 +1063,7 @@ def create_api(app: App | None = None) -> FastAPI:
 
     @api.post("/a2a/rpc")
     def a2a_rpc(payload: dict = Body(...)) -> dict:
-        """json-rpc 2.0 binding. only the methods clawcrew can honour exactly."""
+        """json-rpc 2.0 binding. only the methods crittertown can honour exactly."""
         data = body(payload)
         rpc_id = data.get("id")
         method = data.get("method")
@@ -1085,10 +1074,10 @@ def create_api(app: App | None = None) -> FastAPI:
             if method == "message/send":
                 message = params.get("message") or params
                 parsed = a2a_spec.message_from_json(message)
-                metadata = (message.get("metadata") or {}).get("clawcrew") or {}
+                metadata = (message.get("metadata") or {}).get("crittertown") or {}
                 team_id = metadata.get("crewId") or params.get("crewId")
                 if not team_id:
-                    raise ValidationError("message/send needs metadata.clawcrew.crewId")
+                    raise ValidationError("message/send needs metadata.crittertown.crewId")
                 sent = app.a2a.send(
                     team_id=team_id,
                     from_agent_id=parsed["from_agent_id"],
@@ -1099,8 +1088,8 @@ def create_api(app: App | None = None) -> FastAPI:
                     thread_id=parsed["thread_id"],
                 )
                 result = a2a_spec.message_to_json(sent, role=a2a_spec.ROLE_USER)
-                result["metadata"]["clawcrew"]["accepted"] = True
-                result["metadata"]["clawcrew"]["reviewPending"] = sent["status"] == "pending"
+                result["metadata"]["crittertown"]["accepted"] = True
+                result["metadata"]["crittertown"]["reviewPending"] = sent["status"] == "pending"
                 return a2a_spec.rpc_result(rpc_id, result)
             if method == "tasks/get":
                 task_id = params.get("id") or params.get("taskId")
@@ -1213,7 +1202,7 @@ def create_api(app: App | None = None) -> FastAPI:
     def gate_public(token: str) -> str:
         try:
             preview = app.gates.preview(token)
-        except ClawCrewError as exc:
+        except CritterTownError as exc:
             return gate_page("this approval link does not work",
                              f"<p>{exc.message}</p><p class='note'>ask whoever sent it "
                              "for a fresh link; nothing was changed.</p>")
@@ -1248,7 +1237,7 @@ def create_api(app: App | None = None) -> FastAPI:
     def gate_public_decide(token: str) -> str:
         try:
             outcome = app.gates.decide(token, actor="owner")
-        except ClawCrewError as exc:
+        except CritterTownError as exc:
             return gate_page("that did not go through", f"<p>{exc.message}</p>")
         gate = outcome["gate"]
         decided = outcome["decision"]

@@ -6,7 +6,7 @@ they validate, call one service method, and return.
 ## first call
 
 ```bash
-export CLAWCREW_API_TOKEN=dev        # optional locally, required behind a proxy
+export CRITTERTOWN_API_TOKEN=dev        # optional locally, required behind a proxy
 curl -s localhost:8000/health
 curl -s -X POST localhost:8000/crews -H 'content-type: application/json' \
   -d '{"name":"growth","mission":"own the funnel"}'
@@ -31,7 +31,7 @@ curl -s "localhost:8000/crews/$CREW/triggers"
 
 ## auth
 
-`authorization: Bearer <CLAWCREW_API_TOKEN>` or `x-clawcrew-token`. `/health` and
+`authorization: Bearer <CRITTERTOWN_API_TOKEN>` or `x-crittertown-token`. `/health` and
 `/g/{token}` stay open on purpose: a health check must not need a secret, and an approval
 link is the secret.
 

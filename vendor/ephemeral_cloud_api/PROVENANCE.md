@@ -13,4 +13,4 @@
 used by `ingredients/machines/ephemeral/client.py`: sandbox
 create/get/pause/resume/connect/delete. command execution is not here: it goes over
 envd, which is the upstream sdk's job and stays behind `pip install -e ".[ephemeral]"`.
-the project naming this upstream is `clawcrew/thirdparty.md`.
+the project naming this upstream is `crittertown/thirdparty.md`.

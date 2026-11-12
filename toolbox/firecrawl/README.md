@@ -8,8 +8,8 @@ the thing that licence forbids. an agent asks for a page, the platform posts to 
 and the result is a plain dict.
 
 ```sh
-CLAWCREW_FIRECRAWL_API_KEY=fc-...
-CLAWCREW_FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v1   # or your own deployment
+CRITTERTOWN_FIRECRAWL_API_KEY=fc-...
+CRITTERTOWN_FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v1   # or your own deployment
 ```
 
 three calls, and they are all an agent needs: `scrape` one page to markdown, `crawl` a site

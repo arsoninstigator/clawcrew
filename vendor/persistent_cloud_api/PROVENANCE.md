@@ -12,4 +12,4 @@
 
 used by `ingredients/machines/persistent/client.py`: computers
 create/get/list/exec/start/stop/delete. the project naming this upstream is
-`clawcrew/thirdparty.md`.
+`crittertown/thirdparty.md`.

@@ -1,7 +1,7 @@
 """persistent adapter: persistent computers for an agent.
 
 this runs on persistent's **generated** openapi client, vendored in
-`clawcrew/vendor/persistent_cloud_api` (Apache-2.0, source in PersistentAI/persistent,
+`crittertown/vendor/persistent_cloud_api` (Apache-2.0, source in PersistentAI/persistent,
 `openapi/cloud.json`). nothing here re-types a route or a json field by hand: the
 paths, request bodies and response models come from that client, so when persistent
 changes a field the diff shows up in the vendored package, not in string literals
@@ -81,7 +81,7 @@ class PersistentProvider(BaseProvider):
         api_key: str,
         base_url: str = DEFAULT_PERSISTENT_BASE,
         image: str = "",
-        client: str = "clawcrew",
+        client: str = "crittertown",
         transport: httpx.BaseTransport | None = None,
     ):
         self.api_key = api_key or ""
@@ -105,7 +105,7 @@ class PersistentProvider(BaseProvider):
 
     # ---- translation --------------------------------------------------
     def build_spec(self, spec: dict) -> dict:
-        """translate a clawcrew runtime dict into a ComputerCreateRequest body.
+        """translate a crittertown runtime dict into a ComputerCreateRequest body.
         a plain string network policy becomes the vendor's object."""
         spec = spec or {}
         body: dict[str, Any] = {}
@@ -203,7 +203,7 @@ class PersistentProvider(BaseProvider):
         return rows
 
     def destroy(self, handle: Handle) -> None:
-        """persistent computers outlive clawcrew rows; callers must opt in."""
+        """persistent computers outlive crittertown rows; callers must opt in."""
         self._require()
         try:
             response = call(

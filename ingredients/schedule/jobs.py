@@ -5,10 +5,10 @@ processes. that means a worker that dies mid-job leaves a `running` row that can
 inspected and requeued, rather than losing the work.
 
 this module is the only place the broker's module name is spelled: a python import cannot
-be aliased, so `clawcrew/thirdparty.md` names the project and this imports it. everything
-else about it is ours, and `CLAWCREW_BROKER=inproc` needs none of it.
+be aliased, so `crittertown/thirdparty.md` names the project and this imports it. everything
+else about it is ours, and `CRITTERTOWN_BROKER=inproc` needs none of it.
 
-    celery -A ingredients.schedule.jobs worker -Q clawcrew --loglevel=info
+    celery -A ingredients.schedule.jobs worker -Q crittertown --loglevel=info
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover
     crontab = None  # type: ignore
 
 app = build_app()
-beat = Celery("clawcrew", broker=app.settings.schedule_broker_url) if Celery else None
+beat = Celery("crittertown", broker=app.settings.schedule_broker_url) if Celery else None
 if beat is not None:
     beat.conf.task_default_queue = app.settings.schedule_worker_queue
 
@@ -74,14 +74,14 @@ def process(limit: int = 10) -> dict:
 
 
 if beat is not None:
-    beat.task(name="clawcrew.jobs.run_job")(run_job)
-    beat.task(name="clawcrew.jobs.tick")(tick)
-    beat.task(name="clawcrew.jobs.nightly")(nightly)
-    beat.task(name="clawcrew.jobs.fire_event")(fire_event)
-    beat.task(name="clawcrew.jobs.process")(process)
+    beat.task(name="crittertown.jobs.run_job")(run_job)
+    beat.task(name="crittertown.jobs.tick")(tick)
+    beat.task(name="crittertown.jobs.nightly")(nightly)
+    beat.task(name="crittertown.jobs.fire_event")(fire_event)
+    beat.task(name="crittertown.jobs.process")(process)
     beat.conf.timezone = "UTC"
     beat.conf.beat_schedule = {
-        "clawcrew-tick": {"task": "clawcrew.jobs.tick", "schedule": 15.0},
-        "clawcrew-nightly": {"task": "clawcrew.jobs.nightly", "schedule": crontab(hour=2, minute=0)},
+        "crittertown-tick": {"task": "crittertown.jobs.tick", "schedule": 15.0},
+        "crittertown-nightly": {"task": "crittertown.jobs.nightly", "schedule": crontab(hour=2, minute=0)},
     }
     beat.conf.beat_schedule_filename = "/data/beat-schedule"

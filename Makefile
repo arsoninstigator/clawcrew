@@ -4,7 +4,7 @@ install:
 	pip install -e ".[dev]"
 
 test:
-	cd clawcrew/tests && python -m unittest discover -s . -p "test_*.py"
+	cd crittertown/tests && python -m unittest discover -s . -p "test_*.py"
 
 # what a fresh machine should do before anyone believes the repo works
 check: vendor-audit test
@@ -35,4 +35,4 @@ clean:
 	rm -rf demo_data .pytest_cache **/__pycache__
 
 ddl:
-	python scripts/export_ddl.py > clawcrew/docs/schema.postgres.sql
+	python scripts/export_ddl.py > crittertown/docs/schema.postgres.sql

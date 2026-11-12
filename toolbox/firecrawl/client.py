@@ -42,7 +42,7 @@ class FirecrawlClient:
             "called": True,
             "base_url": self.base_url,
             "configured": self.configured(),
-            "needs": "CLAWCREW_FIRECRAWL_API_KEY",
+            "needs": "CRITTERTOWN_FIRECRAWL_API_KEY",
             "calls": ["scrape", "crawl", "map"],
         }
 
@@ -52,7 +52,7 @@ class FirecrawlClient:
             raise ProviderNotConfigured(
                 "firecrawl has no api key",
                 provider="firecrawl",
-                hint="set CLAWCREW_FIRECRAWL_API_KEY, or leave it unset and stop calling it",
+                hint="set CRITTERTOWN_FIRECRAWL_API_KEY, or leave it unset and stop calling it",
             )
         return httpx.Client(
             base_url=(self.base_url or DEFAULT_BASE).strip().rstrip("/"),

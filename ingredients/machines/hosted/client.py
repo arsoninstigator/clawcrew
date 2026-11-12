@@ -6,7 +6,7 @@ is no runtime here to adapt: what is usable is the python sdk, and that is what 
 file drives. it is an **opt in provider**, never the only path.
 
     pip install hosted
-    HOSTED_API_KEY=ss_live_... clawcrew get persistent --target hosted --apply
+    HOSTED_API_KEY=ss_live_... crittertown get persistent --target hosted --apply
 
 the sdk is the contract, so nothing here guesses an endpoint. every call is a documented
 one from their readme: `Sandbox.create`, `commands.run`, `files.write`, `files.read_text`,
@@ -110,7 +110,7 @@ class HostedProvider(BaseProvider):
             return live
         raise ProviderFailure(
             f"sandbox {handle.ref} was created by another process and this sdk version "
-            "has no connect(); re-create it with `clawcrew get`, the handle is stale")
+            "has no connect(); re-create it with `crittertown get`, the handle is stale")
 
     def is_ready(self, handle: Handle) -> bool:
         return bool(handle.ref)

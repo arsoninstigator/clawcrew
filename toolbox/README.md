@@ -1,6 +1,6 @@
 # toolbox
 
-things clawcrew **calls**. someone else's daemon, over its own api, with your key: nothing
+things crittertown **calls**. someone else's daemon, over its own api, with your key: nothing
 here is copied into the platform, and nothing here runs inside it.
 
 the difference from `ingredients/` is ownership, not size. an ingredient is started by the
@@ -13,4 +13,4 @@ toolbox/firecrawl/   the worked example: a crawl tool an agent calls
 
 adding one: a `status()` that reports whether it is configured, one function per call that
 returns a plain dict, `ProviderFailure` on anything that is not 2xx, and no import of the
-project's own code. if it needs a licence review, `clawcrew/thirdparty.md` carries the row.
+project's own code. if it needs a licence review, `crittertown/thirdparty.md` carries the row.

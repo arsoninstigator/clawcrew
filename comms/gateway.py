@@ -13,7 +13,7 @@ restart must not double-post. `via` says which side wrote the row.
 
 from __future__ import annotations
 
-from core.errors import ClawCrewError, NotAllowed
+from core.errors import CritterTownError, NotAllowed
 from comms import events as spec
 
 
@@ -49,7 +49,7 @@ class CommsGateway:
             if channel.get("id"):
                 try:
                     self.comms.auto_bridge(channel["id"])
-                except ClawCrewError:
+                except CritterTownError:
                     pass
             return
         if name != "channel.message" or not context:
@@ -72,7 +72,7 @@ class CommsGateway:
                 # it came from the channel: mirroring it back would be a loop
                 mirror=False,
             )
-        except ClawCrewError:
+        except CritterTownError:
             # a message that cannot be signed is still a message: the app has it,
             # and losing the conversation to protect the log would be the wrong
             # trade. the room's own `stats` shows the gap.
@@ -112,5 +112,5 @@ class CommsGateway:
                 author_kind=event.get("author_kind") or "external",
                 via="comms",
             )
-        except ClawCrewError:
+        except CritterTownError:
             return

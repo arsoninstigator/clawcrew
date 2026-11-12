@@ -16,7 +16,7 @@ rows were not edited *relative to each other*; it does not prove who wrote them,
 whoever can write the table can write a whole consistent chain. a signature does. each
 row carries the agent's `agentid`, its pubkey and a schnorr signature over the digest,
 so `export()` hands you a bundle that `attest.verify_entries()` can check with no
-database, no running clawcrew and no trust in the person who sent it. logs are reports;
+database, no running crittertown and no trust in the person who sent it. logs are reports;
 this is testimony.
 
 what gets recorded is decided in one place (`record_event`) from the events the
@@ -264,7 +264,7 @@ class AuditService:
         entries = list(reversed(self.history(agent_id, limit=100000)))
         pubkey = self.keys.pubkey_of(agent_id)
         return {
-            "kind": "clawcrew.attestation",
+            "kind": "crittertown.attestation",
             "version": 1,
             "agent_id": agent_id,
             "agent_key": agent["agent_key"] if "agent_key" in agent.keys() else "",
@@ -293,7 +293,7 @@ class AuditService:
         workflow = self.store.one("select * from workflows where id = ?", (workflow_id,))
         signers = sorted({e["signer"] for e in entries if e["signer"]})
         return {
-            "kind": "clawcrew.workflow-attestation",
+            "kind": "crittertown.workflow-attestation",
             "version": 1,
             "workflow_id": workflow_id,
             "name": workflow["name"] if workflow else "",

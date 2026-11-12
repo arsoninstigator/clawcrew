@@ -1,10 +1,10 @@
 """create one disposable ephemeral sandbox from the command line.
 
-`clawcrew get disposable --target ephemeral --apply` calls this, so the api key path and
+`crittertown get disposable --target ephemeral --apply` calls this, so the api key path and
 the embed path end up in the same place: a handle on stdout that the rest of
-clawcrew already knows how to use.
+crittertown already knows how to use.
 
-    python -m clawcrew.create.ingredients.machines.ephemeral.create --template base
+    python -m ingredients.machines.ephemeral.create --template base
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import json
 
 from core.config import Settings
 from sandbox import build_registry
-from core.errors import ClawCrewError
+from core.errors import CritterTownError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
             "ttl_seconds": args.ttl}
     try:
         handle = provider.ensure("cli", spec)
-    except ClawCrewError as exc:
+    except CritterTownError as exc:
         print(json.dumps(exc.to_dict(), indent=2))
         return 1
     print(json.dumps({"handle": handle.to_dict()}, indent=2))

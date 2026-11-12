@@ -1,4 +1,4 @@
-"""clawcrew backend.
+"""crittertown backend.
 
 crews of specialist agents, each with a persistent computer, a shared kanban, a
 reviewable a2a channel, and visual workflows - self hosted.
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from core.config import Settings
 from core.errors import (
-    ClawCrewError,
+    CritterTownError,
     Conflict,
     NotAllowed,
     NotFound,
@@ -31,7 +31,7 @@ __all__ = [
     "App",
     "build_app",
     "Settings",
-    "ClawCrewError",
+    "CritterTownError",
     "Conflict",
     "NotAllowed",
     "NotFound",

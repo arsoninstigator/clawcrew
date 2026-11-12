@@ -3,12 +3,12 @@
 this is nip-01 to the byte: `id` is the sha256 of the serialized
 `[0, pubkey, created_at, kind, tags, content]`, `created_at` is unix seconds, and
 `sig` is a bip340 signature over the id. anything that can read a nostr relay can
-read this without a clawcrew decoder, which is the whole reason for not inventing
+read this without a crittertown decoder, which is the whole reason for not inventing
 a private envelope.
 
 the room primitive is nip-29: a group is a room, kind 9 is a message with an `h`
 tag naming the room, 9000/9001 are put-user and remove-user, 39000 is room
-metadata. clawcrew adds a few kinds of its own in an unregistered range for the
+metadata. crittertown adds a few kinds of its own in an unregistered range for the
 things a workspace does that plain chat does not have (a card moving, a shift
 rolling, a gate waiting) and keeps them in tags, so a client that does not know
 them still renders the `content`.
@@ -30,7 +30,7 @@ ROOM_MESSAGE = 9
 MEMBERSHIP_ADD = 9000
 MEMBERSHIP_REMOVE = 9001
 ROOM_META = 39000
-# clawcrew's own, unregistered on purpose: a client that does not know the number
+# crittertown's own, unregistered on purpose: a client that does not know the number
 # ignores it, and nothing in nip-29 collides with it
 CARD = 4110
 HANDOFF = 4111
