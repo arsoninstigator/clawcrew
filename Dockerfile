@@ -45,6 +45,8 @@ COPY core/config.py core/errors.py ./core/
 # a bare package marker, not the platform's `core/__init__.py`: that one builds the object
 # graph, and the whole point of this stage is that the graph is not here.
 RUN touch core/__init__.py
-COPY sandbox/base.py sandbox/http.py sandbox/transport.py ./sandbox/
+# base and http only: transport is the platform's side of a provider, it imports the
+# vendored clients, and nothing the agent runs ever asks for it
+COPY sandbox/base.py sandbox/http.py ./sandbox/
 COPY agents/runtime.py ./agents/
 CMD ["python", "-c", "print('agent vm: harness only, ask the platform for the rest')"]

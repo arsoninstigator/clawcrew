@@ -1,0 +1,16 @@
+# the build context only needs the source. a stale local build/ or a sqlite file in
+# here would otherwise be copied into the image and shadow the real packages.
+.git/
+.gitignore
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.db
+demo_data/
+.env
+.pytest_cache/
+theidea/

@@ -1,7 +1,7 @@
 """shared plumbing for the hosted providers.
 
 both adapters talk through the openapi clients generated from each vendor's own
-spec and vendored into `crittertown.vendor`, so the request paths, headers and body
+spec and vendored into `vendor/`, so the request paths, headers and body
 shapes are theirs, not strings we typed. this module owns the three things the two
 adapters would otherwise duplicate:
 

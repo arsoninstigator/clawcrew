@@ -6,9 +6,13 @@ no toolbox, and nothing a copied file imports from either.
 """
 
 import importlib
+import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -195,3 +199,51 @@ class EntryPointTests(unittest.TestCase):
                     self.fail(f"{path.relative_to(ROOT)} runs `python -m {module}`, which "
                               f"does not import: {exc}")
         self.assertGreater(checked, 0, "the plan scan found no module to check")
+
+
+class AgentVmHarnessTests(unittest.TestCase):
+    """the agent stage copies files by name, so the suite runs what it copied.
+
+    the boundary tests above prove no *platform* code is in the agent vm. this proves
+    the stage still works: copy exactly those files into an empty directory, add the
+    bare `core/__init__.py` the dockerfile touches, and import the harness with the
+    repo root off the path. a harness file that reaches for a vendored provider client
+    passes every boundary test and fails here, which is how it was found in the image.
+    """
+
+    def stage_copy(self, base: pathlib.Path) -> None:
+        for path in copied_paths(agent_stage()):
+            target = base / path.relative_to(ROOT)
+            if path.is_dir():
+                shutil.copytree(path, target, dirs_exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(path, target)
+        (base / "core").mkdir(exist_ok=True)
+        (base / "core" / "__init__.py").touch()
+
+    def test_the_copied_harness_imports_without_the_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            self.stage_copy(base)
+            code = ("import core.config, core.errors, sandbox.base, sandbox.http, "
+                    "agents.runtime; print('harness ok')")
+            env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+            env["PYTHONPATH"] = str(base)
+            result = subprocess.run([sys.executable, "-c", code], cwd=base, env=env,
+                                    capture_output=True, text=True, timeout=120)
+            self.assertEqual(
+                result.returncode, 0,
+                "the agent vm cannot start its own harness:\n" + result.stderr[-1500:])
+
+    def test_the_harness_does_not_need_the_vendor_clients(self):
+        # the vm asks the platform for compute; only the platform's ingredient adapters
+        # talk to a provider, and they ship the vendored clients. if the harness ever
+        # imports one, the stage has to copy it and the vm stops being portable.
+        imports = re.compile(r"^\s*(?:from|import)\s+vendor\b", re.MULTILINE)
+        for path in copied_paths(agent_stage()):
+            if path.suffix != ".py":
+                continue
+            self.assertIsNone(
+                imports.search(path.read_text()),
+                f"{path.relative_to(ROOT)} imports a vendored provider client")

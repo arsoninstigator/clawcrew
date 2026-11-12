@@ -7,7 +7,7 @@ name = "crittertown"
 version = "0.1.0"
 description = "agent crews with persistent computers, reviewable a2a, and visual workflows"
 requires-python = ">=3.11"
-# the vendored clients (crittertown/vendor) import attrs, httpx, python-dateutil and
+# the vendored clients (vendor/) import attrs, httpx, python-dateutil and
 # pydantic v2, so those are runtime dependencies, not dev extras. a clean-machine
 # build caught dateutil missing here; it is declared now.
 dependencies = [
