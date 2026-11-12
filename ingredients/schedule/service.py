@@ -249,11 +249,11 @@ class InProcBroker(Broker):
 
 
 class ScheduleBroker(Broker):
-    """hands jobs to an existing schedule cluster.
+    """hands jobs to an existing broker cluster.
 
-    the app is `clawcrew.ingredients.schedule.jobs` and the single task is `run_job`, so a schedule
-    deployment only needs that module on the path. scheduling semantics stay in
-    sqlite either way, schedule just moves the work.
+    the app is `ingredients.schedule.jobs` and the single task is `run_job`, so a cluster
+    deployment only needs that module on the path. scheduling semantics stay in sqlite
+    either way; the broker just moves the work.
     """
 
     name = "schedule"
@@ -266,19 +266,22 @@ class ScheduleBroker(Broker):
 
     def _app(self):
         try:
-            from schedule import Schedule  # type: ignore
+            from celery import Celery  # type: ignore
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ProviderNotConfigured(
-                "schedule is not installed; pip install schedule or use CLAWCREW_BROKER=inproc"
+                "the broker is not installed; pip install 'clawcrew[schedule]' "
+                "or use CLAWCREW_BROKER=inproc",
+                provider="schedule",
+                hint='pip install "clawcrew[schedule]"',
             ) from exc
-        app = Schedule("clawcrew", broker=self.broker_url)
+        app = Celery("clawcrew", broker=self.broker_url)
         app.conf.task_default_queue = self.queue
         return app
 
     def enqueue(self, kind: str, payload: dict, delay: float = 0.0) -> str:
         job_id = self._fallback.enqueue(kind, payload, delay)  # durable record always
         app = self._app()
-        app.send_task("clawcrew.work.jobs.run_job", args=[job_id], countdown=max(0, int(delay)))
+        app.send_task("clawcrew.jobs.run_job", args=[job_id], countdown=max(0, int(delay)))
         return job_id
 
     def dequeue(self, limit: int = 1) -> list[Job]:

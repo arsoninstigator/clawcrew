@@ -17,9 +17,6 @@ dependencies = [
     "attrs>=23.2",
     "python-dateutil>=2.8",
     "pydantic>=2.5",
-    # schedule is not optional: overnight runs, the tick beat and every trigger that
-    # queues work go through it. `CLAWCREW_BROKER=inproc` is the dev/test path.
-    "schedule>=5.3",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +25,10 @@ dependencies = [
 # the one identifier in the manifest that cannot be renamed; `clawcrew/thirdparty.md` says
 # whose it is and why the hop is not reimplemented here.
 ephemeral = ["e2b>=2.0"]
-schedule = ["schedule>=5.3"]
+# a cluster: `CLAWCREW_BROKER=schedule` moves job ids between processes over redis.
+# the in-process broker is the default and needs nothing, so this is an extra, not a
+# dependency. the requirement carries the broker's own distribution name, like ephemeral's.
+schedule = ["celery[redis]>=5.3"]
 dify-yaml = ["pyyaml>=6.0"]
 dev = ["httpx>=0.27"]
 

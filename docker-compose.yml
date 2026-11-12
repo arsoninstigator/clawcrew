@@ -1,12 +1,13 @@
 # the clawcrew services. everything here is ours; the tools it plugs into are yours.
 #
-#   docker compose up -d                      api + redis + schedule worker + beat
+#   docker compose up -d                      api + redis + worker + beat
 #   docker compose --profile workflows up -d  ... plus a self-hosted n8n on :5678
 #
-# schedule is not optional: the beat fires the tick every 15s (enqueueing due
-# schedules) and the nightly event at 02:00 UTC, and every trigger that queues work
-# goes through the same queue. `CLAWCREW_BROKER=inproc` replaces all of it with an
-# in-process loop, which is what the tests use.
+# worker and beat are the cluster path: the beat fires the tick every 15s (enqueueing due
+# schedules) and the nightly event at 02:00 UTC, and the worker drains what it enqueues.
+# both are the broker's own binary, which is why the image installs the `schedule` extra
+# and why the command names it: a binary cannot be renamed. `CLAWCREW_BROKER=inproc` needs
+# neither container and no package at all, which is what the tests use.
 #
 # dify is not defined here on purpose: it is a stack (api, worker, web, postgres,
 # redis, vector store), not one container. run their docker/docker-compose.yaml,
@@ -35,7 +36,7 @@ services:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["schedule", "-A", "clawcrew.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
+    command: ["celery", "-A", "ingredients.schedule.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
     depends_on: [redis]
     restart: unless-stopped
     # to run persistent computers from this container instead of the host:
@@ -47,7 +48,7 @@ services:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["schedule", "-A", "clawcrew.jobs", "beat", "--loglevel=info"]
+    command: ["celery", "-A", "ingredients.schedule.jobs", "beat", "--loglevel=info"]
     depends_on: [redis]
     restart: unless-stopped
 

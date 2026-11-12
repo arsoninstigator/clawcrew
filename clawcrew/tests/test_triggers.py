@@ -141,23 +141,29 @@ class TemplateTests(unittest.TestCase):
 
 
 class ScheduleConfigTests(unittest.TestCase):
-    def test_beat_and_tasks_are_registered_when_schedule_is_installed(self):
+    def test_beat_and_tasks_are_registered_when_the_broker_is_installed(self):
         try:
             from ingredients.schedule import jobs
-        except Exception:  # pragma: no cover - schedule absent
-            self.skipTest("schedule is not installed in this environment")
-        if jobs.schedule is None:
-            self.skipTest("schedule is not installed in this environment")
-        schedule = jobs.schedule.conf.beat_schedule
-        self.assertIn("clawcrew-tick", schedule)
-        self.assertIn("clawcrew-nightly", schedule)
-        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.work.jobs.tick")
-        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.work.jobs.nightly")
-        registered = set(jobs.schedule.tasks)
-        for name in ("clawcrew.work.jobs.run_job",
-                     "clawcrew.work.jobs.tick",
-                     "clawcrew.work.jobs.fire_event"):
+        except Exception:  # pragma: no cover - broker absent
+            self.skipTest("the broker is not installed in this environment")
+        if jobs.beat is None:
+            self.skipTest("the broker is not installed in this environment")
+        beat = jobs.beat.conf.beat_schedule
+        self.assertIn("clawcrew-tick", beat)
+        self.assertIn("clawcrew-nightly", beat)
+        self.assertEqual(beat["clawcrew-tick"]["task"], "clawcrew.jobs.tick")
+        self.assertEqual(beat["clawcrew-nightly"]["task"], "clawcrew.jobs.nightly")
+        registered = set(jobs.beat.tasks)
+        for name in ("clawcrew.jobs.run_job", "clawcrew.jobs.tick", "clawcrew.jobs.fire_event"):
             self.assertIn(name, registered)
+
+    def test_the_default_broker_is_in_process_and_needs_no_package(self):
+        """the in-process path is the default and is what the suite runs on, so a fresh
+        install drains its own queue without installing anything."""
+        from ingredients.schedule import service
+
+        settings = type("S", (), {"broker": "inproc"})()
+        self.assertEqual(service.make_broker(object(), settings).name, "inproc")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ ENV PYTHONUNBUFFERED=1 CLAWCREW_DB=/data/clawcrew.db
 
 COPY pyproject.toml README.md ./
 COPY core api agents work comms org manage create sandbox ingredients toolbox ./
-RUN pip install --no-cache-dir -e .
+# the cluster extra, because the worker and beat containers run the broker's binary
+RUN pip install --no-cache-dir -e ".[schedule]"
 
 # the persistent runtime boots local microVMs, so it wants the host's /dev/kvm.
 # off by default: build with --build-arg INSTALL_PERSISTENT=true and map the device.
@@ -26,7 +27,10 @@ WORKDIR /agent
 ENV PYTHONUNBUFFERED=1
 RUN pip install --no-cache-dir httpx pydantic
 COPY pyproject.toml ./
-COPY core/__init__.py core/config.py core/errors.py ./core/
+COPY core/config.py core/errors.py ./core/
+# a bare package marker, not the platform's `core/__init__.py`: that one builds the object
+# graph, and the whole point of this stage is that the graph is not here.
+RUN touch core/__init__.py
 COPY sandbox/base.py sandbox/http.py sandbox/transport.py ./sandbox/
 COPY agents/runtime.py ./agents/
 CMD ["python", "-c", "print('agent vm: harness only, ask the platform for the rest')"]

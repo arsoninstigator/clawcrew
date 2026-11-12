@@ -1,10 +1,14 @@
-"""schedule entrypoint.
+"""the broker entrypoint, for a cluster.
 
-the durable queue in sqlite is the source of truth; schedule only moves a job id
-between processes. that means a schedule worker that dies mid-job leaves a `running`
-row that can be inspected and requeued, rather than losing the work.
+the durable queue in sqlite is the source of truth; the broker only moves a job id between
+processes. that means a worker that dies mid-job leaves a `running` row that can be
+inspected and requeued, rather than losing the work.
 
-    schedule -A clawcrew.ingredients.schedule.jobs worker -Q clawcrew --loglevel=info
+this module is the only place the broker's module name is spelled: a python import cannot
+be aliased, so `clawcrew/thirdparty.md` names the project and this imports it. everything
+else about it is ours, and `CLAWCREW_BROKER=inproc` needs none of it.
+
+    celery -A ingredients.schedule.jobs worker -Q clawcrew --loglevel=info
 """
 
 from __future__ import annotations
@@ -13,15 +17,17 @@ from core.app import build_app
 from core.db import loads, now
 from ingredients.schedule.service import Job
 
-try:  # schedule is optional
-    from schedule import Schedule  # type: ignore
+try:  # the broker is optional: the in-process path in service.py needs no package
+    from celery import Celery  # type: ignore
+    from celery.schedules import crontab  # type: ignore
 except ImportError:  # pragma: no cover
-    Schedule = None  # type: ignore
+    Celery = None  # type: ignore
+    crontab = None  # type: ignore
 
 app = build_app()
-schedule = Schedule("clawcrew", broker=app.settings.schedule_broker_url) if Schedule else None
-if schedule is not None:
-    schedule.conf.task_default_queue = app.settings.schedule_worker_queue
+beat = Celery("clawcrew", broker=app.settings.schedule_broker_url) if Celery else None
+if beat is not None:
+    beat.conf.task_default_queue = app.settings.schedule_worker_queue
 
 
 def load_job(job_id: str) -> Job | None:
@@ -67,20 +73,15 @@ def process(limit: int = 10) -> dict:
     return {"results": app.worker.process(limit)}
 
 
-if schedule is not None:
-    from schedule.schedules import crontab  # type: ignore
-
-    schedule.task(name="clawcrew.work.jobs.run_job")(run_job)
-    schedule.task(name="clawcrew.work.jobs.tick")(tick)
-    schedule.task(name="clawcrew.work.jobs.nightly")(nightly)
-    schedule.task(name="clawcrew.work.jobs.fire_event")(fire_event)
-    schedule.task(name="clawcrew.work.jobs.process")(process)
-    schedule.conf.timezone = "UTC"
-    schedule.conf.beat_schedule = {
-        "clawcrew-tick": {"task": "clawcrew.work.jobs.tick", "schedule": 15.0},
-        "clawcrew-nightly": {
-            "task": "clawcrew.work.jobs.nightly",
-            "schedule": crontab(hour=2, minute=0),
-        },
+if beat is not None:
+    beat.task(name="clawcrew.jobs.run_job")(run_job)
+    beat.task(name="clawcrew.jobs.tick")(tick)
+    beat.task(name="clawcrew.jobs.nightly")(nightly)
+    beat.task(name="clawcrew.jobs.fire_event")(fire_event)
+    beat.task(name="clawcrew.jobs.process")(process)
+    beat.conf.timezone = "UTC"
+    beat.conf.beat_schedule = {
+        "clawcrew-tick": {"task": "clawcrew.jobs.tick", "schedule": 15.0},
+        "clawcrew-nightly": {"task": "clawcrew.jobs.nightly", "schedule": crontab(hour=2, minute=0)},
     }
-    schedule.conf.beat_schedule_filename = "/data/schedulebeat-schedule"
+    beat.conf.beat_schedule_filename = "/data/beat-schedule"
