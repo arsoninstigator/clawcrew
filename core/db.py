@@ -642,6 +642,50 @@ def now() -> float:
     return time.time()
 
 
+LATER_COLUMNS: dict[str, dict[str, str]] = {
+    "tasks": {"channel_id": "text references channels(id) on delete set null"},
+    # which side wrote the row: the app, or the signed log behind it
+    "channel_messages": {"via": "text not null default 'app'"},
+    # immutable public handle: alphanumeric, generated once, never updated
+    "agents": {
+        "agent_key": "text",
+        "scope": "text not null default '{}'",
+        # the principal: bech32 of sha256(pubkey). set once, signed, never moved
+        "agentid": "text",
+        # what the agent is good at, and the lines of work it serves
+        "specializations": "text not null default '[]'",
+        "verticals": "text not null default '[]'",
+    },
+    # a spawn is a principal with a parent, and a lane in a fan-out
+    "agent_spawns": {
+        "subagent_id": "text",
+        "parent_agentid": "text",
+        "fan_out": "integer not null default 0",
+        "nonce": "text",
+    },
+    # signatures on the provenance chain
+    "agent_audit": {
+        "signer": "text not null default ''",
+        "pubkey": "text not null default ''",
+        "sig": "text not null default ''",
+    },
+    # a workflow is inert until its status says otherwise
+    "workflows": {
+        "status": "text not null default 'active'",
+        "proposed_by_agent_id": "text",
+        "approved_by": "text not null default ''",
+        "approved_date": "real",
+    },
+}
+
+LATER_INDEXES = (
+    "create index if not exists tasks_channel on tasks (channel_id, column_name)",
+    "create unique index if not exists agents_key on agents (agent_key)",
+    "create unique index if not exists agents_agentid on agents (agentid)",
+    "create unique index if not exists agent_spawns_subagent on agent_spawns (subagent_id)",
+)
+
+
 class Store:
     """thin sqlite wrapper. every call opens a short lived connection; wal mode
     plus a busy timeout makes that safe with worker threads."""
@@ -663,51 +707,13 @@ class Store:
     def _add_columns(self, c: sqlite3.Connection) -> None:
         """v2 columns on v1 tables. sqlite has no `add column if not exists`, so
         check the pragma; this stays idempotent for a db created fresh from SCHEMA."""
-        wanted = {
-            "tasks": {"channel_id": "text references channels(id) on delete set null"},
-            # which side wrote the row: the app, or the signed log behind it
-            "channel_messages": {"via": "text not null default 'app'"},
-            # immutable public handle: alphanumeric, generated once, never updated
-            "agents": {
-                "agent_key": "text",
-                "scope": "text not null default '{}'",
-                # the principal: bech32 of sha256(pubkey). set once, signed, never moved
-                "agentid": "text",
-                # what the agent is good at, and the lines of work it serves
-                "specializations": "text not null default '[]'",
-                "verticals": "text not null default '[]'",
-            },
-            # a spawn is a principal with a parent, and a lane in a fan-out
-            "agent_spawns": {
-                "subagent_id": "text",
-                "parent_agentid": "text",
-                "fan_out": "integer not null default 0",
-                "nonce": "text",
-            },
-            # signatures on the provenance chain
-            "agent_audit": {
-                "signer": "text not null default ''",
-                "pubkey": "text not null default ''",
-                "sig": "text not null default ''",
-            },
-            # a workflow is inert until its status says otherwise
-            "workflows": {
-                "status": "text not null default 'active'",
-                "proposed_by_agent_id": "text",
-                "approved_by": "text not null default ''",
-                "approved_date": "real",
-            },
-        }
-        for table, columns in wanted.items():
+        for table, columns in LATER_COLUMNS.items():
             existing = {row["name"] for row in c.execute(f"pragma table_info({table})")}
             for name, decl in columns.items():
                 if name not in existing:
                     c.execute(f"alter table {table} add column {name} {decl}")
-        c.execute("create index if not exists tasks_channel on tasks (channel_id, column_name)")
-        c.execute("create unique index if not exists agents_key on agents (agent_key)")
-        c.execute("create unique index if not exists agents_agentid on agents (agentid)")
-        c.execute("create unique index if not exists agent_spawns_subagent "
-                  "on agent_spawns (subagent_id)")
+        for statement in LATER_INDEXES:
+            c.execute(statement)
         self._backfill_memberships(c)
 
     def _backfill_memberships(self, c: sqlite3.Connection) -> None:
@@ -759,6 +765,20 @@ class Store:
     def one(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         rows = self.query(sql, params)
         return rows[0] if rows else None
+
+
+def open_store(settings: Any) -> "Store":
+    """the backend `CRITTERTOWN_DB_URL` asks for.
+
+    postgres only when a dsn is given, so the sqlite file stays the default and
+    nothing imports psycopg unless a deploy actually uses it.
+    """
+    url = (getattr(settings, "database_url", "") or "").strip()
+    if url:
+        from core.store_postgres import PostgresStore
+
+        return PostgresStore(url)
+    return Store(settings.database_path)
 
 
 def dumps(value: Any) -> str:

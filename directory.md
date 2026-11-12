@@ -16,7 +16,8 @@ manage/        approvals (gates), knowledge (connectors), audit, attest, approva
 create/        intake and coordination: the front door that turns an ask into a crew
 sandbox/       the machine abstraction the platform uses: base, transport, http, local,
                provision (terraform specs), and the provider registry
-core/          one object graph (app.py), settings, db, errors, services, cli
+core/          one object graph (app.py), settings, db, errors, services, cli,
+               the postgres store, and the one sqlite/postgres dialect module
 api/           http routes
 ```
 

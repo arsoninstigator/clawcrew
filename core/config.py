@@ -33,6 +33,9 @@ class Settings:
     """
 
     database_path: str = "crittertown.db"
+    # a postgres dsn (postgresql://...) moves the rows off the sqlite file and onto
+    # insforge or supabase. empty means the file, which is the default on purpose.
+    database_url: str = ""
     allow_local_fallback: bool = True
 
     # persistent computers. "local" runs the persistent OSS runtime on this machine;
@@ -125,6 +128,7 @@ class Settings:
         env = os.environ if env is None else env
         return cls(
             database_path=_env(env, "CRITTERTOWN_DB", "crittertown.db"),
+            database_url=_env(env, "CRITTERTOWN_DB_URL"),
             allow_local_fallback=_flag(env, "CRITTERTOWN_ALLOW_LOCAL_FALLBACK", True),
             persistent_mode=_env(env, "PERSISTENT_MODE", "local").lower(),
             persistent_bin=_env(env, "PERSISTENT_BIN", "persistent"),

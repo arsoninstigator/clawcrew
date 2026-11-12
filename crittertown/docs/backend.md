@@ -36,13 +36,33 @@ adapter away, not a redesign:
 2. paste `docs/schema.postgres.sql` and run it. there are no extensions, no functions and
    no triggers to install: the audit chain and the queue claim are computed in python, so
    a postgres that only honours `create table` and `create index` is enough
-3. point the app at it with a `Store` implementation for psycopg. the interface a
-   postgres backend has to satisfy is four methods: `conn`, `tx`, `query`, `one`
+3. point the app at it: set `CRITTERTOWN_DB_URL` and install the extra
 
-what has to be fixed when that adapter lands, said plainly so nobody finds it in
-production: `insert or replace into meta` becomes `on conflict (key) do update`, and
-`executescript` becomes a list of statements. everything else in `crittertown/db.py` is
-already portable.
+```bash
+pip install 'crittertown[postgres]'
+export CRITTERTOWN_DB_URL=postgresql://user:pw@host:5432/crittertown
+```
+
+`core.db.open_store` reads that one setting: empty means the sqlite file, anything else
+means `core.store_postgres.PostgresStore`. nothing downstream changes, because it
+offers the same four methods (`conn`, `tx`, `query`, `one`) and the wrapper translates
+sqlite dialect at the driver's edge: `?` becomes `%s`, `insert or replace` becomes
+`on conflict (<the schema's real primary key>) do update`, and `executescript` becomes
+one statement at a time. that is why the three services that issue their own sql keep
+working unchanged.
+
+the schema is not a second file. `core/dialect.py` translates `core.db.SCHEMA` for both
+the runtime and `make ddl`, `crittertown/tests/test_dialect.py` fails if
+`docs/schema.postgres.sql` drifts from it (it had: the published file was 34 tables
+against a 45 table schema, with an `autoincrement` postgres rejects), and
+`crittertown/tests/test_store_postgres.py` drives the store through a fake driver, so a
+`?` reaching psycopg or a transaction that stops being a transaction is a test failure
+rather than a production surprise.
+
+what is still sqlite-shaped, said plainly: `conn()` opens a connection per call and
+`tx()` serializes writers inside one process. that is enough for a single node and for
+a worker set that shares one postgres, and it is not a distributed lock. two processes
+relying on `tx()` for mutual exclusion need a real advisory lock, which is not built.
 
 ## human auth, and the one credential that is a link
 

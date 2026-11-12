@@ -106,8 +106,8 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (570 tests, no network, no sleeps), and it is honest about what is
-not done: the postgres adapter, env injection into sandboxes, and the npm and mcp entry
+it runs, it is tested (611 tests, no network, no sleeps), and it is honest about what is
+not done: env injection into sandboxes, and the npm and mcp entry
 points in `get/`. see `crittertown/docs/remaining.md`.
 
 ## licence

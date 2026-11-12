@@ -30,7 +30,7 @@ from comms.service import CommsService
 from core.config import Settings
 from agents.crews import CrewService
 from org.departments import DepartmentService
-from core.db import Store
+from core.db import Store, open_store
 from core.errors import CritterTownError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.orchestrator import CrewRunner
@@ -157,7 +157,8 @@ def _computer_cdp(crews: CrewService):
 
 def build_app(settings: Settings | None = None, model: AgentModel | None = None) -> App:
     settings = settings or Settings.from_env()
-    store = Store(settings.database_path)
+    # sqlite by default; `CRITTERTOWN_DB_URL` moves the same schema to postgres
+    store = open_store(settings)
     registry = build_registry(settings)
     # keys are held here only when this node has custody of them; otherwise rows are
     # written unsigned and say so, rather than pretending to attest.

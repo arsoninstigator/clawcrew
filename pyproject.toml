@@ -30,6 +30,9 @@ ephemeral = ["e2b>=2.0"]
 # dependency. the requirement carries the broker's own distribution name, like ephemeral's.
 schedule = ["celery[redis]>=5.3"]
 dify-yaml = ["pyyaml>=6.0"]
+# hosting the rows instead of the sqlite file: `CRITTERTOWN_DB_URL=postgresql://...`
+# swaps in the postgres store. the binary wheel keeps the deploy a pip install.
+postgres = ["psycopg[binary]>=3.1"]
 dev = ["httpx>=0.27"]
 
 [project.scripts]

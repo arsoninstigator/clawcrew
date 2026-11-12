@@ -331,7 +331,9 @@ root, baked-in parts under `ingredients/` named for what they do, called parts u
 
 still open, in the order it is worth doing:
 
-1. **postgres store.** `docs/schema.postgres.sql` is generated and portable; the adapter is
-   four methods plus two dialect fixes, listed in `crittertown/docs/backend.md`.
+1. ~~**postgres store.**~~ done: `core/store_postgres.py` with the four methods,
+   `core/dialect.py` as the single translation step, and the published ddl now checked
+   against the schema by a test (it had gone stale at 34 of 45 tables, and carried an
+   `autoincrement` postgres does not accept). see `crittertown/docs/backend.md`.
 2. **sandbox env injection.** `CredentialBroker.sandbox_env()` is built and tested; the
    provider interface needs an `env` argument before a sandbox can actually use it.
