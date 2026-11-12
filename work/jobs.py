@@ -1,12 +1,12 @@
 """compatibility shim.
 
-the celery entrypoint now lives in `clawcrew/work/schedule/jobs.py`, next to the
-scheduler it drains. this module stays because a deployed celery worker already
+the schedule entrypoint now lives in `clawcrew/work/schedule/jobs.py`, next to the
+scheduler it drains. this module stays because a deployed schedule worker already
 points `-A clawcrew.jobs` at it. there is one implementation, and it is not this file.
 """
 
-from work.schedule.jobs import (  # noqa: F401 - re-exported on purpose
-    celery,
+from ingredients.schedule.jobs import (  # noqa: F401 - re-exported on purpose
+    schedule,
     fire_event,
     load_job,
     nightly,
@@ -15,4 +15,4 @@ from work.schedule.jobs import (  # noqa: F401 - re-exported on purpose
     tick,
 )
 
-__all__ = ["celery", "load_job", "run_job", "tick", "nightly", "fire_event", "process"]
+__all__ = ["schedule", "load_job", "run_job", "tick", "nightly", "fire_event", "process"]

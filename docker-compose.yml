@@ -1,9 +1,9 @@
 # the clawcrew services. everything here is ours; the tools it plugs into are yours.
 #
-#   docker compose up -d                      api + redis + celery worker + beat
+#   docker compose up -d                      api + redis + schedule worker + beat
 #   docker compose --profile workflows up -d  ... plus a self-hosted n8n on :5678
 #
-# celery is not optional: the beat fires the tick every 15s (enqueueing due
+# schedule is not optional: the beat fires the tick every 15s (enqueueing due
 # schedules) and the nightly event at 02:00 UTC, and every trigger that queues work
 # goes through the same queue. `CLAWCREW_BROKER=inproc` replaces all of it with an
 # in-process loop, which is what the tests use.
@@ -12,8 +12,8 @@
 # redis, vector store), not one container. run their docker/docker-compose.yaml,
 # then point CLAWCREW_DIFY_BASE_URL at it. see SELF_HOSTING.md.
 #
-# celesto's runtime boots local microVMs, so it belongs on the host with /dev/kvm,
-# not inside this compose file: pip install celesto && celesto setup.
+# persistent's runtime boots local microVMs, so it belongs on the host with /dev/kvm,
+# not inside this compose file: pip install persistent && persistent setup.
 
 services:
   api:
@@ -35,11 +35,11 @@ services:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["celery", "-A", "clawcrew.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
+    command: ["schedule", "-A", "clawcrew.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
     depends_on: [redis]
     restart: unless-stopped
     # to run persistent computers from this container instead of the host:
-    #   build arg INSTALL_CELESTO=true, plus:
+    #   build arg INSTALL_PERSISTENT=true, plus:
     # devices: ["/dev/kvm:/dev/kvm"]
 
   # the clock: tick every 15s, nightly at 02:00 UTC
@@ -47,7 +47,7 @@ services:
     build: .
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
-    command: ["celery", "-A", "clawcrew.jobs", "beat", "--loglevel=info"]
+    command: ["schedule", "-A", "clawcrew.jobs", "beat", "--loglevel=info"]
     depends_on: [redis]
     restart: unless-stopped
 

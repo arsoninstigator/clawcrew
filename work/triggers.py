@@ -9,7 +9,7 @@ maintain, and the honest v1 is: exact matches only, one action per rule, and the
 queue does the rest. overnight work and "when a card lands in review, dispatch the
 next step" are both just rows here.
 
-the queue is celery's job (or sqlite's when celery is not configured). this module
+the queue is schedule's job (or sqlite's when schedule is not configured). this module
 never executes work itself, so a rule that fires twice at 3am is visible in the job
 table instead of hiding in a thread.
 """

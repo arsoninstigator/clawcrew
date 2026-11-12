@@ -18,9 +18,9 @@ import base  # noqa: F401
 
 from core.config import Settings
 from core.errors import ProviderFailure, ProviderNotConfigured, ValidationError
-from integrations import dify as dify_mod
-from integrations import n8n as n8n_mod
-from integrations import build_services
+from toolbox.workflows import dify as dify_mod
+from toolbox.workflows import n8n as n8n_mod
+from core.services import build_services
 from work.workflows import validate_definition
 
 

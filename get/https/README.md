@@ -30,18 +30,18 @@ put it behind your own tls terminator and set `CLAWCREW_API_TOKEN`. every route 
 `authorization: Bearer <token>` or `x-clawcrew-token`. the approval link is deliberately
 public: the link is the credential, it is single use, and it expires.
 
-## celery instead of the sqlite queue
+## schedule instead of the sqlite queue
 
 ```bash
-CLAWCREW_BROKER=celery CELERY_BROKER_URL=redis://... clawcrew serve
-celery -A clawcrew.jobs worker -Q clawcrew
+CLAWCREW_BROKER=schedule SCHEDULE_BROKER_URL=redis://... clawcrew serve
+schedule -A clawcrew.jobs worker -Q clawcrew
 ```
 
-the sqlite queue stays the source of truth, so moving to celery changes who executes a
+the sqlite queue stays the source of truth, so moving to schedule changes who executes a
 job, never what a job means.
 
 ## persistent computers
 
-`clawcrew get persistent --target local` wants a host with `/dev/kvm`, because the celesto
+`clawcrew get persistent --target local` wants a host with `/dev/kvm`, because the persistent
 OSS runtime is microVMs. on a machine without nested virtualisation it says so instead of
 pretending. see `SELF_HOSTING.md`.

@@ -41,7 +41,7 @@ class AgentTests(AppCase):
         team = self.crew()
         agent = self.agent(team["id"])
         self.assertEqual(agent["runtime"]["computer"], "persistent")
-        self.assertEqual(agent["runtime"]["provider"], "celesto")
+        self.assertEqual(agent["runtime"]["provider"], "persistent")
         self.assertEqual(agent["status"], "idle")
 
     def test_duplicate_agent_name_in_same_crew_conflicts(self):

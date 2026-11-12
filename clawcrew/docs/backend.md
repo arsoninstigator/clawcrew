@@ -57,14 +57,14 @@ if you are putting a real ui in front of this, the ui gets a platform session an
 clawcrew with the token on the server side. clawcrew does not model end users, it models
 agents and one owner, and pretending otherwise would be two half-auth systems.
 
-## per-agent credentials: agent-vault by infisical
+## per-agent credentials: agent-vault by credential-broker
 
 an agent with a `GITHUB_TOKEN` in its environment is one prompt injection away from
 leaking it, and an agent that echoes its environment puts the key in a run row. so a key
 is never handed to an agent. it is handed to a proxy, and the agent is given a route
 through it.
 
-[agent-vault](https://github.com/Infisical/agent-vault) is that proxy: a single binary
+[agent-vault](https://github.com/CredentialBroker/agent-vault) is that proxy: a single binary
 that stores credentials, exposes a management api on `14321` and a MITM proxy on `14322`,
 and attaches the real credential to outbound requests. run it on a **different machine**
 from the agents, because that separation is the security claim:
@@ -72,8 +72,8 @@ from the agents, because that separation is the security claim:
 ```bash
 docker run -d --name agent-vault \
   -p 14321:14321 -p 14322:14322 \
-  -e AGENT_VAULT_MASTER_PASSWORD=... \
-  -v agent-vault-data:/data infisical/agent-vault
+  -e CREDENTIAL_BROKER_MASTER_PASSWORD=... \
+  -v agent-vault-data:/data credential-broker/agent-vault
 ```
 
 then, per agent, clawcrew stores a **grant**, never a secret:
@@ -116,9 +116,9 @@ where it lands first, because they accept env at create time.
 | var | meaning |
 | --- | --- |
 | `CLAWCREW_DB` | sqlite path (the runtime today) |
-| `AGENT_VAULT_URL` | agent-vault management api, e.g. `http://vault:14321` |
-| `AGENT_VAULT_PROXY_URL` | agent-vault MITM proxy, e.g. `http://vault:14322` |
-| `AGENT_VAULT_TTL_HOURS` | default grant lifetime, 24 |
+| `CREDENTIAL_BROKER_URL` | agent-vault management api, e.g. `http://vault:14321` |
+| `CREDENTIAL_BROKER_PROXY_URL` | agent-vault MITM proxy, e.g. `http://vault:14322` |
+| `CREDENTIAL_BROKER_TTL_HOURS` | default grant lifetime, 24 |
 | `CLAWCREW_GATE_SECRET` | signs approval links; generated per db when unset |
 | `CLAWCREW_PUBLIC_BASE_URL` | the host approval links are built against |
 | `CLAWCREW_API_TOKEN` | shared bearer token for machines |

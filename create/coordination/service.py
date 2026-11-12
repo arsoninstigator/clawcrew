@@ -10,7 +10,7 @@ object:
 
 sqlite implements both by default, because a crew that runs on one box should not need a
 cluster. the same protocol is what a remote actor runtime would satisfy, and
-`durable_actors.py` describes exactly which actor holds which of these.
+`durableobjects.py` describes exactly which actor holds which of these.
 """
 
 from __future__ import annotations

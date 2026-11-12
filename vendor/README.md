@@ -5,10 +5,15 @@ here so clawcrew runs without shipping its own reimplementation of someone else'
 wire contract. nothing in this directory is ours: each package keeps its upstream
 `LICENSE` and a `PROVENANCE.md` naming the repository, the commit and the files.
 
+the directory name is ours and says what the thing is for (`persistent_cloud_api`,
+`ephemeral_cloud_api`, `a2a_types`); the upstream project is named inside
+`PROVENANCE.md` and in `clawcrew/thirdparty.md`. every import inside a vendored package
+is relative, so a rename touches no file's contents.
+
 | package | upstream | licence | what it is |
 | --- | --- | --- | --- |
-| `celesto_cloud_api` | [CelestoAI/celesto](https://github.com/CelestoAI/celesto) `src/_celesto_cloud_api` | Apache-2.0 | the client generated from `openapi/cloud.json` |
-| `e2b_api` | [e2b-dev/E2B](https://github.com/e2b-dev/E2B) `packages/python-sdk/e2b/api/client` | MIT | the client generated from `spec/openapi.yml` |
+| `persistent_cloud_api` | [CelestoAI/celesto](https://github.com/CelestoAI/celesto) `src/_celesto_cloud_api` | Apache-2.0 | the client generated from `openapi/cloud.json` |
+| `ephemeral_cloud_api` | [e2b-dev/E2B](https://github.com/e2b-dev/E2B) `packages/python-sdk/e2b/api/client` | MIT | the client generated from `spec/openapi.yml` |
 | `a2a_types` | [a2aproject/a2a-python](https://github.com/a2aproject/a2a-python) `src/a2a/compat/v0_3/types.py` + `src/a2a/_base.py` | Apache-2.0 | the pydantic models generated from the a2a json schema |
 
 ## why vendored instead of a dependency
@@ -20,8 +25,8 @@ arrives as a diff in one vendored file, and the request bodies are built by the 
 the vendor tests.
 
 it also keeps the install honest: `pip install -e .` pulls `attrs` and `httpx`, and
-the hosted adapters work with no extra package. `e2b`'s command execution still needs
-their sdk, because commands go over envd rather than the sandbox REST api, so that
+the hosted adapters work with no extra package. command execution inside an ephemeral sandbox still needs
+the upstream sdk, because commands go over envd rather than the sandbox REST api, so that
 lives behind `pip install -e ".[e2b]"`.
 
 ## rules for this directory

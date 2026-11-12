@@ -5,7 +5,7 @@ second copy to go stale.
 
 | folder | what it gets you | status |
 | --- | --- | --- |
-| [`https`](https) | the server itself: uvicorn, docker compose, celery | works |
+| [`https`](https) | the server itself: uvicorn, docker compose, schedule | works |
 | [`api`](api) | the http api over curl, plus the openapi ui | works |
 | [`sdk`](sdk) | the python package, embedded in your own process | works |
 | [`npm`](npm) | a js client for the http api | not built |

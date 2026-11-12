@@ -14,7 +14,11 @@ from typing import Callable
 from core.config import Settings
 from core.errors import ProviderNotConfigured
 from sandbox.base import BaseProvider, ExecResult, Handle, SandboxProvider, validate_spec  # noqa: F401
-from sandbox import celesto, celesto_local, e2b, local
+from sandbox import local
+from ingredients.machines.ephemeral import client as ephemeral_client
+from ingredients.machines.hosted import client as hosted_client
+from ingredients.machines.persistent import client as persistent_client
+from ingredients.machines.persistent import local as persistent_local
 
 __all__ = [
     "ExecResult",
@@ -31,28 +35,28 @@ class ProviderRegistry:
         self.settings = settings
         db_dir = os.path.dirname(os.path.abspath(settings.database_path))
         self._local = local.LocalProvider(os.path.join(db_dir, "sandboxes"))
-        self._celesto_oss = celesto_local.make(
-            settings.celesto_bin, boot_timeout=settings.sandbox_timeout_seconds
+        self._persistent_oss = persistent_local.make(
+            settings.persistent_bin, boot_timeout=settings.sandbox_timeout_seconds
         )
-        self._celesto = celesto.make(
-            settings.celesto_api_key, settings.celesto_base_url, settings.celesto_default_image
+        self._persistent = persistent_client.make(
+            settings.persistent_api_key, settings.persistent_base_url, settings.persistent_default_image
         )
-        self._e2b = e2b.make(settings.e2b_api_key, settings.e2b_base_url, settings.e2b_default_template)
+        self._ephemeral = ephemeral_client.make(settings.ephemeral_api_key, settings.ephemeral_base_url, settings.ephemeral_default_template)
 
     def get(self, kind: str) -> SandboxProvider:
         """kind: 'persistent' | 'ephemeral' | provider name."""
         kind = (kind or "ephemeral").lower()
-        if kind in {"celesto", "celesto-local", "persistent"}:
+        if kind in {"persistent", "persistent-local", "persistent"}:
             # the OSS runtime is the default: their code, on this machine, no account
-            if self.settings.celesto_mode != "cloud" and self._celesto_oss.configured():
-                return self._celesto_oss
-            if self._celesto.configured():
-                return self._celesto
-            return self._fallback("celesto")
-        if kind in {"e2b", "ephemeral"}:
-            if self._e2b.configured():
-                return self._e2b
-            return self._fallback("e2b")
+            if self.settings.persistent_mode != "cloud" and self._persistent_oss.configured():
+                return self._persistent_oss
+            if self._persistent.configured():
+                return self._persistent
+            return self._fallback("persistent")
+        if kind in {"ephemeral", "ephemeral"}:
+            if self._ephemeral.configured():
+                return self._ephemeral
+            return self._fallback("ephemeral")
         if kind in {"local", "both"}:
             return self._local
         raise ProviderNotConfigured(f"unknown sandbox provider '{kind}'", provider=kind)
@@ -60,9 +64,9 @@ class ProviderRegistry:
     def _fallback(self, name: str) -> SandboxProvider:
         if not self.settings.allow_local_fallback:
             hint = (
-                "pip install celesto && celesto setup, or set CELESTO_MODE=cloud + CELESTO_API_KEY"
-                if name == "celesto"
-                else "point E2B_BASE_URL at your self-hosted e2b and set E2B_API_KEY"
+                "pip install persistent && persistent setup, or set PERSISTENT_MODE=cloud + PERSISTENT_API_KEY"
+                if name == "persistent"
+                else "point EPHEMERAL_BASE_URL at your self-hosted ephemeral and set EPHEMERAL_API_KEY"
             )
             raise ProviderNotConfigured(
                 f"{name} is not configured and local fallback is disabled",
@@ -80,7 +84,7 @@ class ProviderRegistry:
                 "isolated": getattr(provider, "isolated", None),
                 "can_exec": getattr(provider, "can_exec", lambda: provider.configured())(),
             }
-            for provider in (self._celesto_oss, self._celesto, self._e2b, self._local)
+            for provider in (self._persistent_oss, self._persistent, self._ephemeral, self._local)
         ]
 
 

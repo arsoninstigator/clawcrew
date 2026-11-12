@@ -7,10 +7,10 @@ text of every license referenced here is in LICENSES/ or next to the vendored co
 vendored code, copied into clawcrew/vendor/ with its upstream license:
 
   Celesto (CelestoAI/celesto)                   Apache-2.0
-    clawcrew/vendor/celesto_cloud_api           generated from openapi/cloud.json
+    clawcrew/vendor/persistent_cloud_api           generated from openapi/cloud.json
 
   E2B (e2b-dev/E2B)                             MIT
-    clawcrew/vendor/e2b_api                     generated from spec/openapi.yml
+    clawcrew/vendor/ephemeral_cloud_api                     generated from spec/openapi.yml
 
   A2A Python SDK (a2aproject/a2a-python)         Apache-2.0
     clawcrew/vendor/a2a_types                   generated from the a2a json schema

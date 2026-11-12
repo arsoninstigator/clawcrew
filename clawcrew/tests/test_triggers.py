@@ -140,23 +140,23 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(service._render(7, context), 7)
 
 
-class CeleryConfigTests(unittest.TestCase):
-    def test_beat_and_tasks_are_registered_when_celery_is_installed(self):
+class ScheduleConfigTests(unittest.TestCase):
+    def test_beat_and_tasks_are_registered_when_schedule_is_installed(self):
         try:
-            from work.schedule import jobs
-        except Exception:  # pragma: no cover - celery absent
-            self.skipTest("celery is not installed in this environment")
-        if jobs.celery is None:
-            self.skipTest("celery is not installed in this environment")
-        schedule = jobs.celery.conf.beat_schedule
+            from ingredients.schedule import jobs
+        except Exception:  # pragma: no cover - schedule absent
+            self.skipTest("schedule is not installed in this environment")
+        if jobs.schedule is None:
+            self.skipTest("schedule is not installed in this environment")
+        schedule = jobs.schedule.conf.beat_schedule
         self.assertIn("clawcrew-tick", schedule)
         self.assertIn("clawcrew-nightly", schedule)
-        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.work.schedule.jobs.tick")
-        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.work.schedule.jobs.nightly")
-        registered = set(jobs.celery.tasks)
-        for name in ("clawcrew.work.schedule.jobs.run_job",
-                     "clawcrew.work.schedule.jobs.tick",
-                     "clawcrew.work.schedule.jobs.fire_event"):
+        self.assertEqual(schedule["clawcrew-tick"]["task"], "clawcrew.work.jobs.tick")
+        self.assertEqual(schedule["clawcrew-nightly"]["task"], "clawcrew.work.jobs.nightly")
+        registered = set(jobs.schedule.tasks)
+        for name in ("clawcrew.work.jobs.run_job",
+                     "clawcrew.work.jobs.tick",
+                     "clawcrew.work.jobs.fire_event"):
             self.assertIn(name, registered)
 
 

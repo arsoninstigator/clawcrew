@@ -1,7 +1,7 @@
 """visual workflows: a json dag that the in-app builder edits and the backend runs.
 
 the definition is the product surface. a node graph in json can be rendered by an
-n8n/langflow-style canvas, diffed in git, imported from another tool, and executed
+n8n/workflows-style canvas, diffed in git, imported from another tool, and executed
 by this engine without the canvas needing to know how execution works.
 
 node types:
@@ -31,10 +31,10 @@ from comms.a2a import A2AService
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
 from core.errors import NotFound, ValidationError
-from work.kanban import KanbanService
+from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.orchestrator import CrewRunner
 from sandbox import Handle
-from integrations import build_services
+from core.services import build_services
 
 NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n", "dify"}
 

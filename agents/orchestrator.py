@@ -26,7 +26,7 @@ from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
 from core.errors import ClawCrewError, NotFound, ValidationError
-from work.kanban import KanbanService
+from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.runtime import AgentModel, build_model, render_prompt
 from sandbox import Handle, ProviderRegistry
 
@@ -228,7 +228,7 @@ class CrewRunner:
             provider = self.registry.get("ephemeral")
             spec = {
                 "kind": "ephemeral",
-                "template": runtime.get("template") or self.settings.e2b_default_template,
+                "template": runtime.get("template") or self.settings.ephemeral_default_template,
                 "ttl_seconds": runtime.get("ttl_seconds") or self.settings.sandbox_timeout_seconds,
             }
             return provider, provider.ensure(f"task-{task['id']}", spec)

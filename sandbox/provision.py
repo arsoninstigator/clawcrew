@@ -10,10 +10,10 @@ with a bill. so every target answers the same question the same way:
    what would run without running it.
 
 nothing here calls a vendor sdk. byoc means the machine or the account is yours and
-the software is open source: celesto and e2b runtime are adapted through their own
+the software is open source: persistent and ephemeral runtime are adapted through their own
 clis and compose files, and the cloud targets emit terraform you keep in your repo.
 when a provider needs something the host cannot give (kvm for firecracker, qemu for
-celesto local), the plan says so in `notes` instead of failing three steps later.
+persistent local), the plan says so in `notes` instead of failing three steps later.
 """
 
 from __future__ import annotations
@@ -158,23 +158,23 @@ class Provisioner:
 
     def targets(self) -> list[dict]:
         found = {name: bool(self._which(name)) for name in
-                 ("terraform", "docker", "ssh", "kubectl", "celesto", "aws", "gcloud",
+                 ("terraform", "docker", "ssh", "kubectl", "persistent", "aws", "gcloud",
                   "az", "oci")}
         return [
             {"target": "local", "kinds": [PERSISTENT, DISPOSABLE],
-             "needs": ["celesto (local microvm) or docker"],
-             "available": found["celesto"] or found["docker"]},
-            {"target": "celesto", "kinds": [PERSISTENT],
-             "needs": ["celesto cli", "CELESTO_API_KEY for cloud"],
-             "available": found["celesto"]},
-            {"target": "e2b", "kinds": [DISPOSABLE],
-             "needs": ["docker + kvm for the embed runtime, or E2B_API_KEY"],
-             "available": found["docker"] or bool(self.settings.e2b_api_key)},
+             "needs": ["persistent (local microvm) or docker"],
+             "available": found["persistent"] or found["docker"]},
+            {"target": "persistent", "kinds": [PERSISTENT],
+             "needs": ["persistent cli", "PERSISTENT_API_KEY for cloud"],
+             "available": found["persistent"]},
+            {"target": "ephemeral", "kinds": [DISPOSABLE],
+             "needs": ["docker + kvm for the embed runtime, or EPHEMERAL_API_KEY"],
+             "available": found["docker"] or bool(self.settings.ephemeral_api_key)},
             {"target": "docker", "kinds": [PERSISTENT, DISPOSABLE],
              "needs": ["docker"], "available": found["docker"]},
-            {"target": "superserve", "kinds": [PERSISTENT, DISPOSABLE],
-             "needs": ["superserve sdk", "SUPERSERVE_API_KEY (their cloud, opt in)"],
-             "available": bool(self.settings.superserve_api_key)},
+            {"target": "hosted", "kinds": [PERSISTENT, DISPOSABLE],
+             "needs": ["hosted sdk", "HOSTED_API_KEY (their cloud, opt in)"],
+             "available": bool(self.settings.hosted_api_key)},
             {"target": "ssh", "kinds": [PERSISTENT, DISPOSABLE],
              "needs": ["ssh to your own vps, bare metal or personal server"],
              "available": found["ssh"]},
@@ -197,7 +197,7 @@ class Provisioner:
         spec = dict(spec or {})
         target = target or spec.get("target") or self.default_target(kind)
         spec.setdefault("name", "clawcrew-demo")
-        spec.setdefault("image", self.settings.celesto_default_image)
+        spec.setdefault("image", self.settings.persistent_default_image)
         spec.setdefault("region", self.default_region(target))
         builder = getattr(self, f"_plan_{target}", None)
         if builder is None:
@@ -210,9 +210,9 @@ class Provisioner:
 
     def default_target(self, kind: str) -> str:
         if kind == PERSISTENT:
-            return "celesto" if self._which("celesto") else (
+            return "persistent" if self._which("persistent") else (
                 "docker" if self._which("docker") else "local")
-        return "e2b" if (self._which("docker") or self.settings.e2b_api_key) else "local"
+        return "ephemeral" if (self._which("docker") or self.settings.ephemeral_api_key) else "local"
 
     @staticmethod
     def default_region(target: str) -> str:
@@ -223,12 +223,12 @@ class Provisioner:
         name = spec["name"]
         if kind == PERSISTENT:
             steps = [
-                Step("exec", "create a persistent computer with the celesto oss runtime",
-                     ["celesto", "computer", "create", "--name", name, "--image", spec["image"]]),
+                Step("exec", "create a persistent computer with the persistent oss runtime",
+                     ["persistent", "computer", "create", "--name", name, "--image", spec["image"]]),
                 Step("exec", "prove it is reachable",
-                     ["celesto", "computer", "exec", name, "--", "uname", "-a"]),
+                     ["persistent", "computer", "exec", name, "--", "uname", "-a"]),
             ]
-            notes = ["celesto local needs qemu; without it use --target docker"]
+            notes = ["persistent local needs qemu; without it use --target docker"]
         else:
             steps = [
                 Step("exec", "run a disposable container, removed on exit",
@@ -238,21 +238,21 @@ class Provisioner:
             notes = ["disposable means gone after the run; nothing is snapshotted"]
         return Plan("local", kind, name, steps, notes=notes)
 
-    def _plan_celesto(self, kind: str, spec: dict) -> Plan:
+    def _plan_persistent(self, kind: str, spec: dict) -> Plan:
         if kind == DISPOSABLE:
-            raise ValidationError("celesto is the persistent target; use e2b or docker for disposable")
+            raise ValidationError("persistent is the persistent target; use ephemeral or docker for disposable")
         name = spec["name"]
-        cloud = bool(self.settings.celesto_api_key)
-        steps = [Step("exec", "create a computer with celesto",
-                      ["celesto", "computer", "create", "--name", name,
+        cloud = bool(self.settings.persistent_api_key)
+        steps = [Step("exec", "create a computer with persistent",
+                      ["persistent", "computer", "create", "--name", name,
                        "--provider", "cloud" if cloud else "local"])
                  if cloud else
-                 Step("exec", "create a computer with celesto",
-                      ["celesto", "computer", "create", "--name", name])]
+                 Step("exec", "create a computer with persistent",
+                      ["persistent", "computer", "create", "--name", name])]
         steps.append(Step("exec", "check the machine before trusting it",
-                          ["celesto", "doctor", "--strict", "--json"]))
-        notes = ["cloud is opt in: set CELESTO_API_KEY to use it, the local microvm otherwise"]
-        return Plan("celesto", kind, name, steps, notes=notes,
+                          ["persistent", "doctor", "--strict", "--json"]))
+        notes = ["cloud is opt in: set PERSISTENT_API_KEY to use it, the local microvm otherwise"]
+        return Plan("persistent", kind, name, steps, notes=notes,
                     facts={"provider": "cloud" if cloud else "local"})
 
     def _plan_docker(self, kind: str, spec: dict) -> Plan:
@@ -269,50 +269,50 @@ class Provisioner:
             notes = [f"files live in the docker volume {name}-work and survive restarts"]
         return Plan("docker", kind, name, steps, notes=notes)
 
-    def _plan_e2b(self, kind: str, spec: dict) -> Plan:
+    def _plan_ephemeral(self, kind: str, spec: dict) -> Plan:
         if kind == PERSISTENT:
-            raise ValidationError("e2b is the disposable target; use celesto for persistent")
+            raise ValidationError("ephemeral is the disposable target; use persistent for persistent")
         name = spec["name"]
-        if self.settings.e2b_api_key:
-            steps = [Step("exec", "create a firecracker sandbox through the e2b api",
-                          ["python", "-m", "clawcrew.create.sandbox.e2b_create",
-                           "--template", self.settings.e2b_default_template])]
-            notes = ["e2b api key found, so this uses your account, not your machine"]
+        if self.settings.ephemeral_api_key:
+            steps = [Step("exec", "create a firecracker sandbox through the ephemeral api",
+                          ["python", "-m", "clawcrew.create.ingredients.machines.ephemeral.create",
+                           "--template", self.settings.ephemeral_default_template])]
+            notes = ["ephemeral api key found, so this uses your account, not your machine"]
         else:
             steps = [
-                Step("write", "write the e2b embed compose file",
+                Step("write", "write the ephemeral embed compose file",
                      path="embed/compose.yaml",
-                     content="# e2b runtime embed, one machine, kvm required\n"
-                             "# curl the two files from e2b-dev/runtime main/embed/compose\n"),
+                     content="# ephemeral runtime embed, one machine, kvm required\n"
+                             "# curl the two files from ephemeral-dev/runtime main/embed/compose\n"),
                 Step("exec", "start the self hosted firecracker runtime",
                      ["docker", "compose", "-f", "embed/compose.yaml", "up", "-d", "--wait"]),
             ]
-            notes = ["e2b embed needs /dev/kvm on this host; a vps without nested "
-                     "virtualisation cannot run it, celesto local with qemu can"]
-        return Plan("e2b", kind, name, steps, notes=notes)
+            notes = ["ephemeral embed needs /dev/kvm on this host; a vps without nested "
+                     "virtualisation cannot run it, persistent local with qemu can"]
+        return Plan("ephemeral", kind, name, steps, notes=notes)
 
-    def _plan_superserve(self, kind: str, spec: dict) -> Plan:
+    def _plan_hosted(self, kind: str, spec: dict) -> Plan:
         """their runtime is their cloud, so the plan installs the sdk and creates."""
         name = spec["name"]
         module = "python"
         steps = [
-            Step("exec", "install the superserve sdk (apache-2.0, pip)",
-                 [module, "-m", "pip", "install", "--upgrade", "superserve"]),
+            Step("exec", "install the hosted sdk (apache-2.0, pip)",
+                 [module, "-m", "pip", "install", "--upgrade", "hosted"]),
             Step("exec", f"create the {kind} sandbox through their sdk",
-                 [module, "-m", "clawcrew.create.sandbox.superserve_create",
+                 [module, "-m", "clawcrew.create.ingredients.machines.hosted.create",
                   "--name", name] + (["--template", spec["template"]]
                                      if spec.get("template") else [])),
         ]
         notes = [
-            "superserve's repo is the sdk, console and docs; the firecracker runtime is "
+            "hosted's repo is the sdk, console and docs; the firecracker runtime is "
             "their cloud, so this target is the one that is not byoc",
-            "for a self hosted runtime use --target celesto (persistent) or "
-            "--target e2b (disposable)",
+            "for a self hosted runtime use --target persistent (persistent) or "
+            "--target ephemeral (disposable)",
         ]
-        if not self.settings.superserve_api_key:
-            notes.append("set SUPERSERVE_API_KEY before applying")
-        return Plan("superserve", kind, name, steps, notes=notes,
-                    facts={"base_url": self.settings.superserve_base_url})
+        if not self.settings.hosted_api_key:
+            notes.append("set HOSTED_API_KEY before applying")
+        return Plan("hosted", kind, name, steps, notes=notes,
+                    facts={"base_url": self.settings.hosted_base_url})
 
     def _plan_ssh(self, kind: str, spec: dict) -> Plan:
         host = spec.get("ssh_host") or ""
@@ -361,7 +361,7 @@ spec:
     def _plan_cloud(self, provider: str, kind: str, spec: dict) -> Plan:
         if kind == DISPOSABLE:
             raise ValidationError(
-                f"{provider} is a persistent target; disposable machines belong on e2b or docker")
+                f"{provider} is a persistent target; disposable machines belong on ephemeral or docker")
         module, main_tf = _terraform(provider, spec)
         name = spec["name"]
         steps = [
@@ -400,10 +400,10 @@ spec:
         """undo what apply made, by name, without recreating it."""
         plan = self.plan(kind, target, {"name": name})
         commands = {
-            "celesto": [["celesto", "computer", "delete", name, "--json"]],
+            "persistent": [["persistent", "computer", "delete", name, "--json"]],
             "local": [["docker", "rm", "-f", name]],
             "docker": [["docker", "rm", "-f", name], ["docker", "volume", "rm", f"{name}-work"]],
-            "e2b": [["docker", "compose", "-f", "embed/compose.yaml", "down"]],
+            "ephemeral": [["docker", "compose", "-f", "embed/compose.yaml", "down"]],
             "ssh": [["ssh", "-o", "BatchMode=yes", plan.facts.get("host", name),
                      f"docker rm -f {name}"]] if plan.facts.get("host") else [],
             "k8s": [["kubectl", "delete", "pod", name, "--ignore-not-found"]],
@@ -418,7 +418,7 @@ spec:
         known = {"aws": ["aws", "terraform"], "gcp": ["gcloud", "terraform"],
                  "azure": ["az", "terraform"], "oracle": ["oci", "terraform"],
                  "local": ["docker"], "ssh": ["ssh"], "k8s": ["kubectl"],
-                 "celesto": ["celesto"], "bare-metal": ["ssh"], "vps": ["ssh"]}
+                 "persistent": ["persistent"], "bare-metal": ["ssh"], "vps": ["ssh"]}
         if provider not in known:
             raise ValidationError(f"unknown provider '{provider}'", providers=sorted(known))
         found = {name: bool(self._which(name)) for name in known[provider]}
@@ -427,8 +427,8 @@ spec:
             "gcp": ["GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG"],
             "azure": ["AZURE_CONFIG_DIR"],
             "oracle": ["OCI_CLI_CONFIG_FILE"],
-            "celesto": ["CELESTO_API_KEY"],
-            "e2b": ["E2B_API_KEY"],
+            "persistent": ["PERSISTENT_API_KEY"],
+            "ephemeral": ["EPHEMERAL_API_KEY"],
         }.get(provider, [])
         env_found = {key: bool(os.environ.get(key)) for key in env_hints}
         ready = all(found.values()) and (not env_hints or any(env_found.values()))

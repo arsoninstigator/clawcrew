@@ -5,8 +5,8 @@ sandbox. persistent computers get a stable directory under the data root;
 ephemeral sandboxes get a temp dir that is removed on destroy.
 
 this is not a security boundary. `exec` runs through the host shell, so a
-deployment that lets untrusted agents run arbitrary commands must use celesto or
-e2b instead. the api surfaces `provider.isolated = False` so callers can tell.
+deployment that lets untrusted agents run arbitrary commands must use persistent or
+ephemeral instead. the api surfaces `provider.isolated = False` so callers can tell.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ class LocalProvider(BaseProvider):
         from core.errors import NotAllowed
 
         raise NotAllowed(
-            "local provider only allows a small binary allowlist; use celesto or e2b for arbitrary workloads",
+            "local provider only allows a small binary allowlist; use persistent or ephemeral for arbitrary workloads",
             command=command,
         )
 

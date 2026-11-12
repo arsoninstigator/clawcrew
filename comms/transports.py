@@ -11,7 +11,7 @@ half-broken by a change here.
 
 `nostr` is the interoperable one. it speaks nip-01 at a relay: EVENT to publish,
 REQ to read, and the events are the same signed events this module already
-stores. that is what makes a clawcrew room readable by `buzz`, by any nip-29
+stores. that is what makes a clawcrew room readable by `relay`, by any nip-29
 client, or by a relay the operator runs themselves. nothing about the agent
 identity changes when it crosses that boundary, which is the point: the same
 key, the same signature, a different server.
@@ -131,7 +131,7 @@ class HttpBridgeTransport(Transport):
 
 
 class NostrTransport(Transport):
-    """nip-01 over a websocket relay. `buzz` is one of these, and so is a relay
+    """nip-01 over a websocket relay. `relay` is one of these, and so is a relay
     the operator runs on their own machine, and so is anything else that speaks
     the same four messages."""
 
@@ -266,9 +266,9 @@ def _websocket_connector(url: str, timeout: float):
 TRANSPORTS: dict[str, type[Transport]] = {
     "http": HttpBridgeTransport,
     "nostr": NostrTransport,
-    # buzz is a nostr relay with an opinionated client; pointing at its relay is
+    # relay is a nostr relay with an opinionated client; pointing at its relay is
     # the whole integration, so it is the nostr transport with a label
-    "buzz": NostrTransport,
+    "relay": NostrTransport,
 }
 
 
@@ -278,6 +278,6 @@ def build_transport(name: str, config: dict | None = None, **kwargs) -> Transpor
     except KeyError as exc:
         raise ValidationError(f"unknown transport '{name}', known: {sorted(TRANSPORTS)}") from exc
     transport = factory(config, **kwargs)
-    if name == "buzz":
-        transport.name = "buzz"
+    if name == "relay":
+        transport.name = "relay"
     return transport

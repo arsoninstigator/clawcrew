@@ -12,11 +12,11 @@ from types import SimpleNamespace
 from typing import Any
 
 from manage import attest
-from sandbox import browser as browser_layer
+from ingredients import browser as browser_layer
 from comms.a2a import A2AService
 from create.coordination import SqliteCoordination
 from create.intake import AskService
-from manage.agent_vault import CredentialBroker
+from ingredients.credentials.credential_broker import CredentialBroker
 from manage.approvals.service import GateService
 from manage.knowledge.service import ConnectorService
 from work.overnight.service import BriefService
@@ -32,14 +32,14 @@ from agents.crews import CrewService
 from org.departments import DepartmentService
 from core.db import Store
 from core.errors import ClawCrewError
-from work.kanban import KanbanService
+from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.orchestrator import CrewRunner
 from agents.pov import PovService
 from agents.profile import ProfileService
 from agents.runtime import AgentModel
 from sandbox import ProviderRegistry, build_registry
 from work.scheduler import Scheduler, Worker, make_broker
-from integrations import ServiceRegistry
+from core.services import ServiceRegistry
 from work.shifts import ShiftService
 from work.triggers import TriggerService
 from work.workflows import WorkflowService
@@ -79,7 +79,7 @@ class App:
 
     def tick(self) -> dict:
         """one beat, both jobs: queue what is due, and put a handoff on the desk of
-        whoever just came on shift. called by celery beat, by the cli, and by tests."""
+        whoever just came on shift. called by schedule beat, by the cli, and by tests."""
         enqueued = self.scheduler.tick()
         handoffs = self.roll_shifts()
         expired = self.gates.expire()
@@ -126,7 +126,7 @@ class App:
             "briefs": n("briefs"),
             "connectors": n("connectors"),
             "knowledge_docs": n("knowledge_docs"),
-            "vault_grants": n("agent_vault"),
+            "vault_grants": n("credential_broker"),
             "comms_events": n("comms_events"),
             "comms_members": n("comms_members"),
         }
@@ -135,7 +135,7 @@ class App:
 def _computer_cdp(crews: CrewService):
     """the cdp endpoint of an agent's own chrome, if its computer publishes one.
 
-    browser-use should drive the browser that is already inside the agent's computer
+    local-browser should drive the browser that is already inside the agent's computer
     rather than start a second one beside it: one profile, one set of logins, one thing
     to close. a computer that does not publish an endpoint returns nothing, and the
     driver launches its own chromium instead.
@@ -194,7 +194,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         audit.record_event(event, context)
         return fired
 
-    # browser access: browser-use drives, kernel-images supplies a browser, both local.
+    # browser access: local-browser drives, container-browser supplies a browser, both local.
     browsers = browser_layer.build_service(store, crews=crews, settings=settings,
                                            computer_cdp=_computer_cdp(crews))
     gates = GateService(store, audit=audit, secret=settings.gate_secret,

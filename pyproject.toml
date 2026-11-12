@@ -17,15 +17,18 @@ dependencies = [
     "attrs>=23.2",
     "python-dateutil>=2.8",
     "pydantic>=2.5",
-    # celery is not optional: overnight runs, the tick beat and every trigger that
+    # schedule is not optional: overnight runs, the tick beat and every trigger that
     # queues work go through it. `CLAWCREW_BROKER=inproc` is the dev/test path.
-    "celery>=5.3",
+    "schedule>=5.3",
 ]
 
 [project.optional-dependencies]
-# e2b command execution goes over envd, which is the e2b sdk's job, not the REST api's
-e2b = ["e2b>=2.0"]
-celery = ["celery>=5.3"]
+# command execution inside an ephemeral sandbox goes over envd, which only the upstream
+# python sdk implements, so the requirement carries the upstream distribution name. it is
+# the one identifier in the manifest that cannot be renamed; `clawcrew/thirdparty.md` says
+# whose it is and why the hop is not reimplemented here.
+ephemeral = ["e2b>=2.0"]
+schedule = ["schedule>=5.3"]
 dify-yaml = ["pyyaml>=6.0"]
 dev = ["httpx>=0.27"]
 
@@ -34,7 +37,7 @@ clawcrew = "core.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["core*", "api*", "agents*", "work*", "comms*", "org*", "manage*", "create*",
-           "sandbox*", "integrations*", "vendor*"]
+           "sandbox*", "ingredients*", "toolbox*", "workbench*", "infrastructure*", "vendor*"]
 
 [tool.setuptools.package-data]
 vendor = ["vendor/*/LICENSE", "vendor/*/PROVENANCE.md", "vendor/README.md"]

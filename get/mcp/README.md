@@ -20,7 +20,7 @@ exist and are already tested:
 the permission story has to land before the tools do. an mcp client is an agent, so it
 gets an agent identity, a profile and its own scopes, and it should be able to reach only
 the crews and connectors it was granted. that work is `docs/backend.md` and
-`manage/agent_vault`, not a wrapper around `curl`.
+`manage/credential_broker`, not a wrapper around `curl`.
 
 ## what to use today
 

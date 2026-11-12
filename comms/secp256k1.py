@@ -1,7 +1,7 @@
 """secp256k1 schnorr (bip340), in pure python.
 
 why in-tree instead of a dependency: an agent's identity in a nostr-shaped log is
-a keypair, and the signature has to be the same one any relay, `buzz`, or any
+a keypair, and the signature has to be the same one any relay, `relay`, or any
 other nip-01 client will accept. the alternative was to invent a private signing
 scheme, which would have made "interoperable" a lie. so this is the real curve.
 

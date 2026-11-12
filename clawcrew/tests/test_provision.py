@@ -42,8 +42,8 @@ class ProvisionTests(AppCase):
         self.assertIn("nothing was charged", outcome["reason"])
 
     def test_every_target_answers_the_same_two_questions(self):
-        provisioner = self.build(("docker", "ssh", "terraform", "aws", "celesto"))
-        for target, kind in (("docker", PERSISTENT), ("celesto", PERSISTENT),
+        provisioner = self.build(("docker", "ssh", "terraform", "aws", "persistent"))
+        for target, kind in (("docker", PERSISTENT), ("persistent", PERSISTENT),
                              ("local", DISPOSABLE), ("ssh", PERSISTENT),
                              ("aws", PERSISTENT)):
             spec = {"name": "box", "ssh_host": "anne@10.0.0.4"}
@@ -86,9 +86,9 @@ class ProvisionTests(AppCase):
     def test_kinds_are_policed_per_target(self):
         provisioner = self.build(("docker",))
         with self.assertRaises(ValidationError):
-            provisioner.plan(DISPOSABLE, "celesto")
+            provisioner.plan(DISPOSABLE, "persistent")
         with self.assertRaises(ValidationError):
-            provisioner.plan(PERSISTENT, "e2b")
+            provisioner.plan(PERSISTENT, "ephemeral")
         with self.assertRaises(ValidationError):
             provisioner.plan("permanent", "docker")
         with self.assertRaises(ValidationError):
@@ -105,14 +105,14 @@ class ProvisionTests(AppCase):
         self.assertEqual(plan.steps[0].command[:4], ["ssh", "-o", "BatchMode=yes", "anne@10.0.0.4"])
         self.assertIn("--restart=always", plan.steps[0].command[-1])
 
-    def test_e2b_embed_says_what_it_needs_out_loud(self):
+    def test_ephemeral_embed_says_what_it_needs_out_loud(self):
         provisioner = self.build(("docker",))
-        plan = provisioner.plan(DISPOSABLE, "e2b", {"name": "box"})
+        plan = provisioner.plan(DISPOSABLE, "ephemeral", {"name": "box"})
         self.assertTrue(any("kvm" in note for note in plan.notes))
         self.assertTrue(any("compose" in " ".join(s.command) for s in plan.steps if s.command))
 
     def test_the_default_target_uses_what_is_installed(self):
-        self.assertEqual(self.build(("celesto", "docker")).default_target(PERSISTENT), "celesto")
+        self.assertEqual(self.build(("persistent", "docker")).default_target(PERSISTENT), "persistent")
         self.assertEqual(self.build(("docker",)).default_target(PERSISTENT), "docker")
         self.assertEqual(self.build(()).default_target(PERSISTENT), "local")
 

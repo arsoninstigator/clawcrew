@@ -201,7 +201,7 @@ class CrewService:
         ts = now()
         rt = {
             "computer": "persistent" if persistence == "workspace" else "ephemeral",
-            "provider": "celesto",
+            "provider": "persistent",
             "image": "",
             "timeout_seconds": None,
             "persistence": persistence,
@@ -477,7 +477,7 @@ class CrewService:
                     "state": row["state"], "handle": loads(row["handle"], {}), "reused": True}
         if self.registry is None:
             raise ValidationError("no sandbox registry configured")
-        provider = self.registry.get((spec or {}).get("provider") or agent["runtime"].get("provider", "celesto"))
+        provider = self.registry.get((spec or {}).get("provider") or agent["runtime"].get("provider", "persistent"))
         handle = provider.ensure(f"{agent['team_id']}:{agent['name']}", (spec or {}) | {"kind": "persistent"})
         computer_id = row["id"] if row else new_id("cmp")
         with self.store.tx() as c:

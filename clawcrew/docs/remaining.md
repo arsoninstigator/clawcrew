@@ -13,20 +13,20 @@ shapes each remaining piece will expose, and what counts as done for each one.
 short answer to both: yes, and in both cases the missing part is smaller than it
 sounds, but it is a real part.
 
-### celery and the overnight job
+### schedule and the overnight job
 
 baked:
 
-- `clawcrew/jobs.py` registers five celery tasks: `run_job`, `tick`, `nightly`,
+- `work/jobs.py` registers five schedule tasks: `run_job`, `tick`, `nightly`,
   `fire_event`, `process`.
 - beat runs two schedules: `clawcrew-tick` every 15s (enqueues every due row in
   `schedules`) and `clawcrew-nightly` at `crontab(hour=2, minute=0)` with
-  `celery.conf.timezone = "UTC"`.
+  `schedule.conf.timezone = "UTC"`.
 - `nightly()` does one thing: `triggers.fire("schedule.nightly", {"team_id": "",
   "at": now()})`. it does not hardcode work; overnight behavior is a rule that can be
   edited at runtime.
 - `docker-compose.yml` runs `api`, `redis`, `worker` (`--concurrency=2`) and `beat`.
-  celery is a core dependency in `pyproject.toml`, not an extra.
+  schedule is a core dependency in `pyproject.toml`, not an extra.
 - the sqlite `job_queue` is the source of truth and redis only carries a job id, so a
   worker that dies mid-job leaves a `running` row that can be inspected and requeued
   instead of losing the work. `claim()` is a single update, so two workers cannot
@@ -40,7 +40,7 @@ behavior is not shipped. that is what section 5 fixes.
 
 baked, as engine, gates and bindings:
 
-- `clawcrew/create/workflow/service.py` stores a json dag and runs it. seven node types:
+- `work/workflows.py` stores a json dag and runs it. seven node types:
   `agent_task`, `shell`, `set_context`, `human_gate`, `branch`, `n8n`, `dify`.
 - validation is strict at save time: unknown type, missing node spec, dangling
   dependency, cycle, or an `n8n` node without a webhook path are all 422s at save,
@@ -319,20 +319,19 @@ endpoints exercised over http against a real crew, then the sandbox terminated.
 5. **an `n8n`/`dify` node against an unconfigured instance.** save-and-flag or refuse.
    proposal: refuse in the editor, allow over the api so imports round-trip.
 
-## as of 11 nov 2026
+## as of 12 nov 2026
 
 wired this week, with tests that hold it: gates and their signed links, the front door
 (`/ask`), the morning brief, workspace connectors with supervisor grants, the coordination
-contract, and brokered per-agent credentials (`manage/agent_vault`).
+contract, and brokered per-agent credentials (`ingredients/credentials/credential_broker`).
+
+the duplicate modules are retired, and the tree has one home per thing now: code at the
+root, baked-in parts under `ingredients/` named for what they do, called parts under
+`toolbox/`, and the upstream names only in `clawcrew/thirdparty.md`.
 
 still open, in the order it is worth doing:
 
-1. **retire the duplicate modules.** the services that ran the merge live in
-   `create/`, `comms/`, `manage/`, `orgchart/` and `work/`, and several of them are a
-   second copy of a flat module (`clawcrew/crews.py` and `create/crew/service.py` are the
-   same service). `app.py` imports the flat ones, so the copies are dead weight that makes
-   the tree read as two projects. deleting them is mechanical: the suite is the contract.
-2. **postgres store.** `docs/schema.postgres.sql` is generated and portable; the adapter is
+1. **postgres store.** `docs/schema.postgres.sql` is generated and portable; the adapter is
    four methods plus two dialect fixes, listed in `clawcrew/docs/backend.md`.
-3. **sandbox env injection.** `CredentialBroker.sandbox_env()` is built and tested; the
+2. **sandbox env injection.** `CredentialBroker.sandbox_env()` is built and tested; the
    provider interface needs an `env` argument before a sandbox can actually use it.

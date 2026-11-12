@@ -18,11 +18,11 @@ import base  # noqa: F401  (puts the backend on sys.path)
 
 from core.errors import ProviderFailure, ProviderNotConfigured
 from sandbox import Handle
-from sandbox.celesto import CelestoProvider
-from sandbox.e2b import E2BProvider
+from ingredients.machines.persistent.client import PersistentProvider
+from ingredients.machines.ephemeral.client import EphemeralProvider
 from sandbox.transport import api_root
 
-CELESTO_COMPUTER = {
+PERSISTENT_COMPUTER = {
     "id": "cmp_1",
     "name": "agent-a",
     "status": "running",
@@ -30,22 +30,22 @@ CELESTO_COMPUTER = {
     "ram_mb": 2048,
     "disk_size_mb": 8192,
     "image": "clawcrew/persistent:latest",
-    "compute_location": {"provider": "celesto", "region": "us-east", "country_code": "US"},
+    "compute_location": {"provider": "persistent", "region": "us-east", "country_code": "US"},
     "created_at": "2026-11-10T00:00:00Z",
     "connection": {"ssh": "ssh://x", "access_url": "https://y"},
 }
 
-E2B_SANDBOX = {
+EPHEMERAL_SANDBOX = {
     "sandboxID": "sbx_1",
     "templateID": "base",
     "clientID": "cl_1",
     "envdVersion": "0.2.0",
     "envdAccessToken": "secret-token",
-    "domain": "e2b.dev",
+    "domain": "ephemeral.internal",
 }
 
-E2B_DETAIL = {
-    **E2B_SANDBOX,
+EPHEMERAL_DETAIL = {
+    **EPHEMERAL_SANDBOX,
     "startedAt": "2026-11-10T00:00:00Z",
     "endAt": "2026-11-10T00:15:00Z",
     "cpuCount": 2,
@@ -82,34 +82,34 @@ class Recorder:
 class TransportTests(unittest.TestCase):
     def test_version_suffix_is_not_doubled(self):
         self.assertEqual(
-            api_root("https://api.celesto.ai/v1", "https://api.celesto.ai", "/v1"),
-            "https://api.celesto.ai",
+            api_root("https://api.machines.internal/v1", "https://api.machines.internal", "/v1"),
+            "https://api.machines.internal",
         )
         self.assertEqual(
-            api_root("https://api.celesto.ai/", "https://api.celesto.ai", "/v1"),
-            "https://api.celesto.ai",
+            api_root("https://api.machines.internal/", "https://api.machines.internal", "/v1"),
+            "https://api.machines.internal",
         )
-        self.assertEqual(api_root("", "https://api.celesto.ai"), "https://api.celesto.ai")
+        self.assertEqual(api_root("", "https://api.machines.internal"), "https://api.machines.internal")
 
 
-class CelestoContractTests(unittest.TestCase):
-    def provider(self, recorder: Recorder) -> CelestoProvider:
-        return CelestoProvider(
+class PersistentContractTests(unittest.TestCase):
+    def provider(self, recorder: Recorder) -> PersistentProvider:
+        return PersistentProvider(
             "key_123",
-            "https://api.celesto.ai/v1",
+            "https://api.machines.internal/v1",
             "clawcrew/persistent:latest",
             transport=recorder.transport,
         )
 
     def test_create_sends_idempotency_key_and_image(self):
-        recorder = Recorder((201, CELESTO_COMPUTER))
+        recorder = Recorder((201, PERSISTENT_COMPUTER))
         handle = self.provider(recorder).ensure("crew:a", {"vcpus": 2, "ram_mb": 2048})
         request = recorder.requests[0]
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.url.path, "/v1/computers")
         self.assertEqual(request.headers["idempotency-key"], "crew:a")
         self.assertEqual(request.headers["authorization"], "Bearer key_123")
-        self.assertEqual(request.headers["x-celesto-client"], "clawcrew")
+        self.assertEqual(request.headers["x-persistent-client"], "clawcrew")
         body = recorder.body()
         self.assertEqual(body["image"], "clawcrew/persistent:latest")
         self.assertEqual(body["vcpus"], 2)
@@ -126,7 +126,7 @@ class CelestoContractTests(unittest.TestCase):
 
     def test_exec_reads_exit_code_and_duration(self):
         recorder = Recorder((200, {"exit_code": 2, "stdout": "out", "stderr": "err", "duration_ms": 41}))
-        result = self.provider(recorder).exec(Handle("celesto", "persistent", "cmp_1"), "ls /nope", timeout=30)
+        result = self.provider(recorder).exec(Handle("persistent", "persistent", "cmp_1"), "ls /nope", timeout=30)
         self.assertEqual(result.exit_code, 2)
         self.assertEqual(result.stdout, "out")
         self.assertEqual(result.duration_ms, 41)
@@ -135,13 +135,13 @@ class CelestoContractTests(unittest.TestCase):
 
     def test_timed_out_flag_becomes_exit_124(self):
         recorder = Recorder((200, {"exit_code": 0, "stdout": "", "stderr": "", "timed_out": True}))
-        result = self.provider(recorder).exec(Handle("celesto", "persistent", "cmp_1"), "sleep 999")
+        result = self.provider(recorder).exec(Handle("persistent", "persistent", "cmp_1"), "sleep 999")
         self.assertEqual(result.exit_code, 124)
 
     def test_stop_and_start_hit_their_own_routes(self):
-        recorder = Recorder((200, {**CELESTO_COMPUTER, "status": "stopped"}), (200, CELESTO_COMPUTER))
+        recorder = Recorder((200, {**PERSISTENT_COMPUTER, "status": "stopped"}), (200, PERSISTENT_COMPUTER))
         provider = self.provider(recorder)
-        handle = Handle("celesto", "persistent", "cmp_9")
+        handle = Handle("persistent", "persistent", "cmp_9")
         provider.stop(handle)
         provider.start(handle)
         self.assertEqual(recorder.requests[0].url.path, "/v1/computers/cmp_9/stop")
@@ -178,39 +178,39 @@ class CelestoContractTests(unittest.TestCase):
         self.assertEqual(body["mode"], "off")
 
     def test_list_filters_by_status(self):
-        stopped = {**CELESTO_COMPUTER, "id": "cmp_2", "status": "stopped"}
-        recorder = Recorder((200, {"computers": [CELESTO_COMPUTER, stopped], "count": 2}))
+        stopped = {**PERSISTENT_COMPUTER, "id": "cmp_2", "status": "stopped"}
+        recorder = Recorder((200, {"computers": [PERSISTENT_COMPUTER, stopped], "count": 2}))
         rows = self.provider(recorder).list_computers(status="running")
         self.assertEqual([row["id"] for row in rows], ["cmp_1"])
 
     def test_is_ready_maps_status_words(self):
-        running = Recorder((200, CELESTO_COMPUTER))
-        self.assertTrue(self.provider(running).is_ready(Handle("celesto", "persistent", "cmp_1")))
-        stopped = Recorder((200, {**CELESTO_COMPUTER, "status": "stopped"}))
-        self.assertFalse(self.provider(stopped).is_ready(Handle("celesto", "persistent", "cmp_1")))
+        running = Recorder((200, PERSISTENT_COMPUTER))
+        self.assertTrue(self.provider(running).is_ready(Handle("persistent", "persistent", "cmp_1")))
+        stopped = Recorder((200, {**PERSISTENT_COMPUTER, "status": "stopped"}))
+        self.assertFalse(self.provider(stopped).is_ready(Handle("persistent", "persistent", "cmp_1")))
 
     def test_destroy_tolerates_a_gone_computer(self):
         recorder = Recorder((404, {"detail": "not found"}))
-        self.provider(recorder).destroy(Handle("celesto", "persistent", "cmp_x"))
+        self.provider(recorder).destroy(Handle("persistent", "persistent", "cmp_x"))
         self.assertEqual(recorder.requests[0].method, "DELETE")
 
     def test_unconfigured_provider_refuses(self):
         with self.assertRaises(ProviderNotConfigured):
-            CelestoProvider("").ensure("k", {})
+            PersistentProvider("").ensure("k", {})
 
 
-class E2BContractTests(unittest.TestCase):
-    def provider(self, recorder: Recorder) -> E2BProvider:
-        return E2BProvider("e2b_key", "https://api.e2b.dev", "base", transport=recorder.transport)
+class EphemeralContractTests(unittest.TestCase):
+    def provider(self, recorder: Recorder) -> EphemeralProvider:
+        return EphemeralProvider("ephemeral_key", "https://api.ephemeral.internal", "base", transport=recorder.transport)
 
     def test_create_matches_new_sandbox_schema(self):
-        recorder = Recorder((201, E2B_SANDBOX))
+        recorder = Recorder((201, EPHEMERAL_SANDBOX))
         handle = self.provider(recorder).ensure(
             "task:t1", {"ttl_seconds": 120, "metadata": {"crew": "x"}, "env": {"TOKEN": "1"}}
         )
         request = recorder.requests[0]
         self.assertEqual(request.url.path, "/sandboxes")
-        self.assertEqual(request.headers["x-api-key"], "e2b_key")
+        self.assertEqual(request.headers["x-api-key"], "ephemeral_key")
         body = recorder.body()
         self.assertEqual(body["templateID"], "base")
         self.assertEqual(body["timeout"], 120)
@@ -221,19 +221,19 @@ class E2BContractTests(unittest.TestCase):
         self.assertTrue(handle.meta["has_envd_token"])
 
     def test_envd_token_is_never_persisted(self):
-        recorder = Recorder((201, E2B_SANDBOX))
+        recorder = Recorder((201, EPHEMERAL_SANDBOX))
         handle = self.provider(recorder).ensure("task:t2", {})
         self.assertNotIn("secret-token", str(handle.to_dict()))
 
     def test_pause_resume_connect_and_kill(self):
         recorder = Recorder(
             (204, b""),
-            (201, E2B_SANDBOX),
-            (201, E2B_SANDBOX),
+            (201, EPHEMERAL_SANDBOX),
+            (201, EPHEMERAL_SANDBOX),
             (204, b""),
         )
         provider = self.provider(recorder)
-        handle = Handle("e2b", "ephemeral", "sbx_1", {"key": "task:t3"})
+        handle = Handle("ephemeral", "ephemeral", "sbx_1", {"key": "task:t3"})
         provider.pause(handle)
         provider.resume(handle, timeout=60)
         provider.connect(handle, timeout=60)
@@ -254,28 +254,28 @@ class E2BContractTests(unittest.TestCase):
 
     def test_destroy_tolerates_an_expired_sandbox(self):
         recorder = Recorder((404, {"code": 404, "message": "not found"}))
-        self.provider(recorder).destroy(Handle("e2b", "ephemeral", "sbx_3"))
+        self.provider(recorder).destroy(Handle("ephemeral", "ephemeral", "sbx_3"))
 
     def test_destroy_still_raises_on_real_errors(self):
         recorder = Recorder((500, {"code": 500, "message": "boom"}))
         with self.assertRaises(ProviderFailure):
-            self.provider(recorder).destroy(Handle("e2b", "ephemeral", "sbx_3"))
+            self.provider(recorder).destroy(Handle("ephemeral", "ephemeral", "sbx_3"))
 
     def test_is_ready_reads_the_sandbox_state(self):
-        ready = Recorder((200, E2B_DETAIL))
-        self.assertTrue(self.provider(ready).is_ready(Handle("e2b", "ephemeral", "sbx_1")))
+        ready = Recorder((200, EPHEMERAL_DETAIL))
+        self.assertTrue(self.provider(ready).is_ready(Handle("ephemeral", "ephemeral", "sbx_1")))
         gone = Recorder((404, {"code": 404, "message": "not found"}))
-        self.assertFalse(self.provider(gone).is_ready(Handle("e2b", "ephemeral", "sbx_1")))
+        self.assertFalse(self.provider(gone).is_ready(Handle("ephemeral", "ephemeral", "sbx_1")))
 
     def test_exec_refuses_without_the_sdk(self):
         provider = self.provider(Recorder())
         self.assertTrue(provider.configured())
         if provider.can_exec():
-            self.skipTest("e2b sdk is installed in this environment")
+            self.skipTest("ephemeral sdk is installed in this environment")
         with self.assertRaises(ProviderNotConfigured) as ctx:
-            provider.exec(Handle("e2b", "ephemeral", "sbx_1"), "ls")
+            provider.exec(Handle("ephemeral", "ephemeral", "sbx_1"), "ls")
         self.assertIn("envd", ctx.exception.message)
-        self.assertEqual(ctx.exception.details.get("hint"), 'pip install "clawcrew[e2b]"')
+        self.assertEqual(ctx.exception.details.get("hint"), 'pip install "clawcrew[ephemeral]"')
 
 
 if __name__ == "__main__":

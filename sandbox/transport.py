@@ -21,11 +21,11 @@ from typing import Any
 import httpx
 
 from core.errors import ProviderFailure
-from vendor.celesto_cloud_api.client import AuthenticatedClient as CelestoClient
-from vendor.e2b_api.client import AuthenticatedClient as E2BClient
+from vendor.persistent_cloud_api.client import AuthenticatedClient as PersistentClient
+from vendor.ephemeral_cloud_api.client import AuthenticatedClient as EphemeralClient
 
-DEFAULT_CELESTO_BASE = "https://api.celesto.ai"
-DEFAULT_E2B_BASE = "https://api.e2b.dev"
+DEFAULT_PERSISTENT_BASE = "https://api.machines.internal"
+DEFAULT_EPHEMERAL_BASE = "https://api.ephemeral.internal"
 
 
 def api_root(base_url: str, default: str, version_suffix: str = "") -> str:
@@ -41,35 +41,35 @@ def _httpx_args(transport: httpx.BaseTransport | None) -> dict:
     return {"transport": transport} if transport is not None else {}
 
 
-def celesto_client(
+def persistent_client(
     api_key: str,
-    base_url: str = DEFAULT_CELESTO_BASE,
+    base_url: str = DEFAULT_PERSISTENT_BASE,
     *,
     client_tag: str = "clawcrew",
     timeout: float = 60.0,
     transport: httpx.BaseTransport | None = None,
-) -> CelestoClient:
-    return CelestoClient(
-        base_url=api_root(base_url, DEFAULT_CELESTO_BASE, "/v1"),
+) -> PersistentClient:
+    return PersistentClient(
+        base_url=api_root(base_url, DEFAULT_PERSISTENT_BASE, "/v1"),
         token=api_key,
         prefix="Bearer",
         timeout=httpx.Timeout(timeout),
-        headers={"x-celesto-client": client_tag},
+        headers={"x-persistent-client": client_tag},
         raise_on_unexpected_status=True,
         httpx_args=_httpx_args(transport),
     )
 
 
-def e2b_client(
+def ephemeral_client(
     api_key: str,
-    base_url: str = DEFAULT_E2B_BASE,
+    base_url: str = DEFAULT_EPHEMERAL_BASE,
     *,
     timeout: float = 60.0,
     transport: httpx.BaseTransport | None = None,
-) -> E2BClient:
-    # e2b authenticates with a bare X-API-KEY header, not a bearer token.
-    return E2BClient(
-        base_url=api_root(base_url, DEFAULT_E2B_BASE),
+) -> EphemeralClient:
+    # ephemeral authenticates with a bare X-API-KEY header, not a bearer token.
+    return EphemeralClient(
+        base_url=api_root(base_url, DEFAULT_EPHEMERAL_BASE),
         token=api_key,
         prefix="",
         auth_header_name="X-API-KEY",

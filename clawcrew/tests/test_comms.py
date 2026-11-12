@@ -446,9 +446,9 @@ class TransportTests(unittest.TestCase):
         self.assertEqual([e.id for e in reader.pull("r1")], [event.id])
         self.assertEqual(json.loads(puller.sent[-1])[0], "CLOSE")
 
-    def test_buzz_is_a_nostr_relay_with_a_label(self) -> None:
-        transport = build_transport("buzz", {"relay": "wss://buzz.example"})
-        self.assertEqual(transport.name, "buzz")
+    def test_relay_is_a_nostr_relay_with_a_label(self) -> None:
+        transport = build_transport("relay", {"relay": "wss://relay.example"})
+        self.assertEqual(transport.name, "relay")
         self.assertIsInstance(transport, NostrTransport)
 
 

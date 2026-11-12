@@ -8,7 +8,7 @@ from base import AppCase
 
 from core.config import Settings
 from create.coordination import SqliteCoordination, actor_contract, plan_runtime
-from create.coordination.durable_actors import CHART, SERVICE
+from ingredients.durableobjects.client import CHART, SERVICE
 from core.errors import ValidationError
 
 
@@ -64,7 +64,7 @@ class LeaseTests(AppCase):
         self.assertEqual(self.coordination.head("channel:general"), everything[-1]["seq"])
 
 
-class DurableActorsPlanTests(AppCase):
+class DurableObjectsPlanTests(AppCase):
     def test_self_hosting_needs_the_four_facts_their_guide_asks_for(self):
         with self.assertRaises(ValidationError) as caught:
             plan_runtime(self.settings, public_url="https://actors.example.com")

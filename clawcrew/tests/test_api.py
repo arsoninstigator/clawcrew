@@ -32,7 +32,7 @@ class ApiTests(AppCase):
         self.assertEqual(data["counts"]["crews"], 0)
         self.assertEqual(
             {p["name"] for p in data["providers"]},
-            {"celesto-local", "celesto", "e2b", "local"},
+            {"persistent-local", "persistent", "ephemeral", "local"},
         )
 
     def test_unknown_crew_is_404(self):

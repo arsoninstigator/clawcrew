@@ -35,40 +35,42 @@ class Settings:
     database_path: str = "clawcrew.db"
     allow_local_fallback: bool = True
 
-    # persistent computers. "local" runs the celesto OSS runtime on this machine;
+    # persistent computers. "local" runs the persistent OSS runtime on this machine;
     # "cloud" is their hosted api and is opt-in only.
-    celesto_mode: str = "local"
-    celesto_bin: str = "celesto"
-    celesto_api_key: str = ""
-    celesto_base_url: str = "https://api.celesto.ai/v1"
-    celesto_default_image: str = "clawcrew/persistent:latest"
+    persistent_mode: str = "local"
+    persistent_bin: str = "persistent"
+    persistent_api_key: str = ""
+    persistent_base_url: str = "https://api.machines.internal/v1"
+    persistent_default_image: str = "clawcrew/persistent:latest"
 
-    # ephemeral sandboxes. superserve is opt in: their runtime is their cloud,
+    # ephemeral sandboxes. hosted is opt in: their runtime is their cloud,
     # their sdk is the contract, so it never pretends to be byoc.
-    superserve_api_key: str = ""
-    superserve_base_url: str = "https://api.superserve.ai"
-    superserve_template: str = ""
-    e2b_api_key: str = ""
-    e2b_base_url: str = "https://api.e2b.dev"
-    e2b_default_template: str = "base"
+    hosted_api_key: str = ""
+    hosted_base_url: str = "https://api.hosted.ai"
+    hosted_template: str = ""
+    ephemeral_api_key: str = ""
+    ephemeral_base_url: str = "https://api.ephemeral.internal"
+    ephemeral_default_template: str = "base"
+    ephemeral_exec_module: str = ""
 
     # self-hosted workflow tools, plugged in over their own apis
     n8n_base_url: str = "http://localhost:5678"
     n8n_api_key: str = ""
-    itsaplan_base_url: str = "http://localhost:4000"
-    itsaplan_api_key: str = ""
-    langflow_base_url: str = "http://localhost:7860"
-    langflow_api_key: str = ""
-    sim_base_url: str = "http://localhost:3000"
-    sim_api_key: str = ""
+    manage_base_url: str = "http://localhost:4000"
+    manage_api_key: str = ""
+    workflows_base_url: str = "http://localhost:7860"
+    workflows_api_key: str = ""
     dify_base_url: str = "http://localhost/v1"
     dify_api_key: str = ""
     dify_user: str = "clawcrew"
+    # a toolbox entry: an agent calls it, the platform does not run it
+    firecrawl_api_key: str = ""
+    firecrawl_base_url: str = "https://api.firecrawl.dev/v1"
 
-    # scheduling broker: inproc | celery
+    # scheduling broker: inproc | schedule
     broker: str = "inproc"
-    celery_broker_url: str = ""
-    celery_worker_queue: str = "clawcrew"
+    schedule_broker_url: str = ""
+    schedule_worker_queue: str = "clawcrew"
 
     # model endpoint used by the default llm runtime (openai-compatible)
     llm_base_url: str = ""
@@ -87,12 +89,12 @@ class Settings:
     comms_custody: str = "local"
 
     # browser access: open source driver, self-hosted browser, no account and no key.
-    # `browser-use` (mit) drives any cdp endpoint; `kernel-images` (apache-2.0) runs
+    # `local-browser` (mit) drives any cdp endpoint; `container-browser` (apache-2.0) runs
     # chrome in a local container; `none` gives an agent no browser at all.
-    browser_provider: str = "browser-use"
+    browser_provider: str = "local-browser"
     browser_profile_root: str = ""
-    kernel_images_image: str = ""
-    kernel_cdp_url: str = ""
+    container_browser_image: str = ""
+    browser_cdp_url: str = ""
     # this build makes agents the only first class members of a room; people can
     # be enabled, and nothing else about the log changes when they are
     comms_humans_enabled: bool = False
@@ -124,42 +126,43 @@ class Settings:
         return cls(
             database_path=_env(env, "CLAWCREW_DB", "clawcrew.db"),
             allow_local_fallback=_flag(env, "CLAWCREW_ALLOW_LOCAL_FALLBACK", True),
-            celesto_mode=_env(env, "CELESTO_MODE", "local").lower(),
-            celesto_bin=_env(env, "CELESTO_BIN", "celesto"),
-            celesto_api_key=_env(env, "CELESTO_API_KEY"),
-            celesto_base_url=_env(env, "CELESTO_BASE_URL", "https://api.celesto.ai/v1"),
-            celesto_default_image=_env(env, "CELESTO_IMAGE", "clawcrew/persistent:latest"),
-            superserve_api_key=_env(env, "SUPERSERVE_API_KEY"),
-            superserve_base_url=_env(env, "SUPERSERVE_BASE_URL", "https://api.superserve.ai"),
-            superserve_template=_env(env, "SUPERSERVE_TEMPLATE"),
-            e2b_api_key=_env(env, "E2B_API_KEY"),
-            e2b_base_url=_env(env, "E2B_BASE_URL", "https://api.e2b.dev"),
-            e2b_default_template=_env(env, "E2B_TEMPLATE", "base"),
+            persistent_mode=_env(env, "PERSISTENT_MODE", "local").lower(),
+            persistent_bin=_env(env, "PERSISTENT_BIN", "persistent"),
+            persistent_api_key=_env(env, "PERSISTENT_API_KEY"),
+            persistent_base_url=_env(env, "PERSISTENT_BASE_URL", "https://api.machines.internal/v1"),
+            persistent_default_image=_env(env, "PERSISTENT_IMAGE", "clawcrew/persistent:latest"),
+            hosted_api_key=_env(env, "HOSTED_API_KEY"),
+            hosted_base_url=_env(env, "HOSTED_BASE_URL", "https://api.hosted.ai"),
+            hosted_template=_env(env, "HOSTED_TEMPLATE"),
+            ephemeral_api_key=_env(env, "EPHEMERAL_API_KEY"),
+            ephemeral_base_url=_env(env, "EPHEMERAL_BASE_URL", "https://api.ephemeral.internal"),
+            ephemeral_default_template=_env(env, "EPHEMERAL_TEMPLATE", "base"),
+            ephemeral_exec_module=_env(env, "EPHEMERAL_EXEC_MODULE"),
             n8n_base_url=_env(env, "CLAWCREW_N8N_BASE_URL", "http://localhost:5678"),
             n8n_api_key=_env(env, "CLAWCREW_N8N_API_KEY"),
-            itsaplan_base_url=_env(env, "CLAWCREW_ITSAPLAN_BASE_URL", "http://localhost:4000"),
-            itsaplan_api_key=_env(env, "CLAWCREW_ITSAPLAN_API_KEY"),
-            langflow_base_url=_env(env, "CLAWCREW_LANGFLOW_BASE_URL", "http://localhost:7860"),
-            langflow_api_key=_env(env, "CLAWCREW_LANGFLOW_API_KEY"),
-            sim_base_url=_env(env, "CLAWCREW_SIM_BASE_URL", "http://localhost:3000"),
-            sim_api_key=_env(env, "CLAWCREW_SIM_API_KEY"),
+            manage_base_url=_env(env, "CLAWCREW_MANAGE_BASE_URL", "http://localhost:4000"),
+            manage_api_key=_env(env, "CLAWCREW_MANAGE_API_KEY"),
+            workflows_base_url=_env(env, "CLAWCREW_WORKFLOWS_BASE_URL", "http://localhost:7860"),
+            workflows_api_key=_env(env, "CLAWCREW_WORKFLOWS_API_KEY"),
             dify_base_url=_env(env, "CLAWCREW_DIFY_BASE_URL", "http://localhost/v1"),
             dify_api_key=_env(env, "CLAWCREW_DIFY_API_KEY"),
             dify_user=_env(env, "CLAWCREW_DIFY_USER", "clawcrew"),
+            firecrawl_api_key=_env(env, "CLAWCREW_FIRECRAWL_API_KEY"),
+            firecrawl_base_url=_env(env, "CLAWCREW_FIRECRAWL_BASE_URL", "https://api.firecrawl.dev/v1"),
             broker=_env(env, "CLAWCREW_BROKER", "inproc").lower(),
-            celery_broker_url=_env(env, "CELERY_BROKER_URL"),
-            celery_worker_queue=_env(env, "CELERY_QUEUE", "clawcrew"),
+            schedule_broker_url=_env(env, "SCHEDULE_BROKER_URL"),
+            schedule_worker_queue=_env(env, "SCHEDULE_QUEUE", "clawcrew"),
             llm_base_url=_env(env, "CLAWCREW_LLM_BASE_URL"),
             llm_api_key=_env(env, "CLAWCREW_LLM_API_KEY"),
             llm_model=_env(env, "CLAWCREW_LLM_MODEL", "gpt-4.1-mini"),
-            vault_base_url=_env(env, "AGENT_VAULT_URL"),
-            vault_proxy_url=_env(env, "AGENT_VAULT_PROXY_URL"),
-            vault_ttl_hours=float(_env(env, "AGENT_VAULT_TTL_HOURS", "24") or 24),
+            vault_base_url=_env(env, "CREDENTIAL_BROKER_URL"),
+            vault_proxy_url=_env(env, "CREDENTIAL_BROKER_PROXY_URL"),
+            vault_ttl_hours=float(_env(env, "CREDENTIAL_BROKER_TTL_HOURS", "24") or 24),
             comms_custody=_env(env, "CLAWCREW_COMMS_CUSTODY", "local").lower(),
-            browser_provider=_env(env, "CLAWCREW_BROWSER_PROVIDER", "browser-use").lower(),
+            browser_provider=_env(env, "CLAWCREW_BROWSER_PROVIDER", "local-browser").lower(),
             browser_profile_root=_env(env, "CLAWCREW_BROWSER_PROFILE_ROOT"),
-            kernel_images_image=_env(env, "CLAWCREW_KERNEL_IMAGES_IMAGE"),
-            kernel_cdp_url=_env(env, "CLAWCREW_KERNEL_CDP"),
+            container_browser_image=_env(env, "CLAWCREW_CONTAINER_BROWSER_IMAGE"),
+            browser_cdp_url=_env(env, "CLAWCREW_BROWSER_CDP"),
             comms_humans_enabled=_flag(env, "CLAWCREW_COMMS_HUMANS", False),
             comms_relay=_env(env, "CLAWCREW_COMMS_RELAY"),
             comms_relay_transport=_env(env, "CLAWCREW_COMMS_RELAY_TRANSPORT", "nostr").lower(),

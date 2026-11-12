@@ -236,7 +236,7 @@ create table if not exists department_members (
     primary key (department_id, agent_id)
 );
 
--- triggers: event -> queued action. the queue is celery's job, the rule is ours.
+-- triggers: event -> queued action. the queue is schedule's job, the rule is ours.
 create table if not exists triggers (
     id text primary key,
     team_id text not null references teams(id) on delete cascade,
@@ -466,7 +466,7 @@ create index if not exists asks_team on asks (team_id, created_date);
 create index if not exists gates_open on gates (team_id, status, expires_at);
 create index if not exists knowledge_team on knowledge_docs (team_id, connector_id);
 create index if not exists trigger_log_team on trigger_log (team_id, created_date);
-create table if not exists agent_vault (
+create table if not exists credential_broker (
     id text primary key,
     team_id text not null default '',
     agent_id text not null references agents(id) on delete cascade,
@@ -481,7 +481,7 @@ create table if not exists agent_vault (
     created_date real not null,
     unique (agent_id, label)
 );
-create index if not exists agent_vault_agent on agent_vault (agent_id, status);
+create index if not exists credential_broker_agent on credential_broker (agent_id, status);
 
 -- comms: the signed room log. `comms_events` is the authority; the channel
 -- conversation is a view of it, which is why a message carries the event id.

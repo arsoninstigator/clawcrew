@@ -401,7 +401,7 @@ def main(argv: list[str] | None = None) -> int:
     verify.set_defaults(func=cmd_comms)
     bridge = comms_sub.add_parser("bridge", help="attach a relay or http bridge to a room")
     bridge.add_argument("room")
-    bridge.add_argument("transport", choices=["http", "nostr", "buzz"])
+    bridge.add_argument("transport", choices=["http", "nostr", "relay"])
     bridge.add_argument("--relay")
     bridge.add_argument("--url")
     bridge.set_defaults(func=cmd_comms)

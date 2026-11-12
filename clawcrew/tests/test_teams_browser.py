@@ -14,9 +14,9 @@ import unittest
 import base  # noqa: F401
 from base import AppCase
 
-from sandbox import browser as browser_layer
-from sandbox.browser.base import BrowserProvider, NullProvider, Session
-from sandbox.browser.kernel_images import KernelImagesProvider
+from ingredients import browser as browser_layer
+from ingredients.browser.base import BrowserProvider, NullProvider, Session
+from ingredients.browser.container_browser import ContainerBrowserProvider
 from core.errors import NotAllowed, ProviderNotConfigured, ValidationError
 
 
@@ -136,13 +136,13 @@ class BrowserProviderTests(AppCase):
 
     def test_both_lanes_are_open_source_and_need_no_account(self):
         providers = browser_layer.build_providers(self.settings)
-        self.assertEqual(sorted(providers), ["browser-use", "kernel-images", "none"])
-        for name in ("browser-use", "kernel-images"):
+        self.assertEqual(sorted(providers), ["container-browser", "local-browser", "none"])
+        for name in ("local-browser", "container-browser"):
             provider = providers[name]
             self.assertFalse(provider.hosted)
             self.assertFalse(provider.needs_account)
-        self.assertEqual(providers["browser-use"].kind, "driver")
-        self.assertEqual(providers["kernel-images"].kind, "browser")
+        self.assertEqual(providers["local-browser"].kind, "driver")
+        self.assertEqual(providers["container-browser"].kind, "browser")
 
     def test_a_hosted_provider_subclass_is_refused(self):
         class Hosted(BrowserProvider):
@@ -164,7 +164,7 @@ class BrowserProviderTests(AppCase):
     def test_sessions_are_rows_with_an_owner_and_a_scope(self):
         agent = self.crews.add_agent(self.team["id"], "wren")
         session = self.app.browsers.open(agent["id"])
-        self.assertEqual(session["provider"], "browser-use")
+        self.assertEqual(session["provider"], "local-browser")
         self.assertEqual(session["scope"], "persistent")
         self.assertEqual(session["agent_id"], agent["id"])
         self.assertEqual(len(self.app.browsers.list(agent["id"], state="ready")), 1)
@@ -182,28 +182,28 @@ class BrowserProviderTests(AppCase):
         try:
             self.app.browsers.run(agent["id"], "find the number of stars")
         except ProviderNotConfigured as exc:
-            self.assertIn("browser-use", str(exc))
+            self.assertIn("local-browser", str(exc))
             self.assertIn("pip install", str(exc))
-        else:  # pragma: no cover - only when browser-use happens to be installed
-            self.skipTest("browser-use is installed; the driver path ran for real")
+        else:  # pragma: no cover - only when local-browser happens to be installed
+            self.skipTest("local-browser is installed; the driver path ran for real")
 
-    def test_kernel_images_without_an_image_explains_how_to_build_one(self):
-        provider = KernelImagesProvider(settings=self.settings)
+    def test_container_browser_without_an_image_explains_how_to_build_one(self):
+        provider = ContainerBrowserProvider(settings=self.settings)
         with self.assertRaises(ProviderNotConfigured) as caught:
             provider.ensure("agent_x:task")
-        self.assertIn("kernel-images", str(caught.exception))
+        self.assertIn("container-browser", str(caught.exception))
         self.assertIn("apache-2.0", str(caught.exception))
 
-    def test_kernel_images_attaches_to_a_browser_you_started_yourself(self):
-        settings = type("S", (), {"kernel_cdp_url": "ws://127.0.0.1:9222/devtools/browser/abc",
-                                  "kernel_images_image": ""})()
-        provider = KernelImagesProvider(settings=settings)
+    def test_container_browser_attaches_to_a_browser_you_started_yourself(self):
+        settings = type("S", (), {"browser_cdp_url": "ws://127.0.0.1:9222/devtools/browser/abc",
+                                  "container_browser_image": ""})()
+        provider = ContainerBrowserProvider(settings=settings)
         session = provider.ensure("agent_x:task", {"scope": "task"})
         self.assertEqual(session.cdp_url, "ws://127.0.0.1:9222/devtools/browser/abc")
         self.assertEqual(session.handle["mode"], "attach")
         self.assertFalse(provider.stop(session)["stopped"])
 
-    def test_kernel_images_runs_the_local_container_and_waits_for_cdp(self):
+    def test_container_browser_runs_the_local_container_and_waits_for_cdp(self):
         calls: list[list[str]] = []
 
         def runner(argv):
@@ -216,8 +216,8 @@ class BrowserProviderTests(AppCase):
                 return 0, "container123\n", ""
             return 1, "", "unexpected"
 
-        settings = type("S", (), {"kernel_cdp_url": "", "kernel_images_image": "kernel-docker"})()
-        provider = KernelImagesProvider(settings=settings, runner=runner)
+        settings = type("S", (), {"browser_cdp_url": "", "container_browser_image": "browser-docker"})()
+        provider = ContainerBrowserProvider(settings=settings, runner=runner)
         provider._wait_for_cdp = lambda port, timeout: f"ws://127.0.0.1:{port}/devtools/browser/x"
         session = provider.ensure("agent_x:task", {"scope": "task"})
         self.assertEqual(session.cdp_url, "ws://127.0.0.1:43210/devtools/browser/x")
@@ -276,11 +276,11 @@ class BrowserRunTests(AppCase):
         self.assertEqual(len(self.app.browsers.list(self.agent["id"])), 1)
 
     def test_a_browser_only_provider_cannot_drive(self):
-        self.app.browsers.providers["kernel-images"] = KernelImagesProvider(
-            settings=type("S", (), {"kernel_cdp_url": "ws://127.0.0.1:9222/x",
-                                    "kernel_images_image": ""})()
+        self.app.browsers.providers["container-browser"] = ContainerBrowserProvider(
+            settings=type("S", (), {"browser_cdp_url": "ws://127.0.0.1:9222/x",
+                                    "container_browser_image": ""})()
         )
-        session = self.app.browsers.open(self.agent["id"], {"provider": "kernel-images"})
+        session = self.app.browsers.open(self.agent["id"], {"provider": "container-browser"})
         with self.assertRaises(ProviderNotConfigured):
             self.app.browsers.run(self.agent["id"], "go", session_id=session["id"])
 
@@ -344,10 +344,10 @@ class SurfaceTests(AppCase):
     def test_a_missing_driver_is_503_with_the_install_line(self):
         response = self.client.post(f"/agents/{self.agent['id']}/browser/run",
                                     json={"task": "read the page"})
-        if response.status_code == 200:  # pragma: no cover - browser-use is installed
-            self.skipTest("browser-use installed")
+        if response.status_code == 200:  # pragma: no cover - local-browser is installed
+            self.skipTest("local-browser installed")
         self.assertEqual(response.status_code, 503)
-        self.assertIn("browser-use", response.json()["message"])
+        self.assertIn("local-browser", response.json()["message"])
 
 
 if __name__ == "__main__":

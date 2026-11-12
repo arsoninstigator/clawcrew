@@ -86,13 +86,13 @@ class RegistryTests(AppCase):
 
     def test_status_reports_every_provider(self):
         names = {entry["name"] for entry in self.app.registry.status()}
-        self.assertEqual(names, {"celesto-local", "celesto", "e2b", "local"})
+        self.assertEqual(names, {"persistent-local", "persistent", "ephemeral", "local"})
         by_name = {entry["name"]: entry for entry in self.app.registry.status()}
         self.assertTrue(by_name["local"]["configured"])
-        self.assertFalse(by_name["celesto"]["configured"])
+        self.assertFalse(by_name["persistent"]["configured"])
 
     def test_handle_roundtrip(self):
-        handle = Handle(provider="celesto", kind="persistent", ref="cmp_1", meta={"cpu": 2})
+        handle = Handle(provider="persistent", kind="persistent", ref="cmp_1", meta={"cpu": 2})
         self.assertEqual(Handle.from_dict(handle.to_dict()), handle)
         self.assertEqual(Handle.from_dict("raw-ref").ref, "raw-ref")
 

@@ -3,50 +3,50 @@
 clawcrew is built to run on machines you own, against software you run. nothing in
 the default path calls a vendor's hosted api and nothing depends on an account.
 
-## compute: celesto OSS, locally
+## compute: persistent OSS, locally
 
 (needs nested virtualization, so this runs on a real host, not inside a sandbox)
 
-the `persistent` lifecycle is celesto's own runtime on your host:
+the `persistent` lifecycle is persistent's own runtime on your host:
 
 ```bash
-pip install celesto
-celesto setup          # downloads the microVM tooling (qemu on macOS, kvm on linux)
-celesto doctor --strict # refuses to pretend if virtualization is not usable
+pip install persistent
+persistent setup          # downloads the microVM tooling (qemu on macOS, kvm on linux)
+persistent doctor --strict # refuses to pretend if virtualization is not usable
 ```
 
 clawcrew then drives it through the documented CLI with `--json`
-(`clawcrew/sandbox/celesto_local.py`): `computer create --name`, `exec --start`,
+(`clawcrew/sandbox/persistent_local.py`): `computer create --name`, `exec --start`,
 `start`/`stop`/`pause`/`resume`/`delete`/`info`/`list`. an agent's computer is a
 named microVM that survives between tasks.
 
-the hosted api is still supported, but it is opt-in: `CELESTO_MODE=cloud` plus
-`CELESTO_API_KEY`. that switch exists so the same code can run either side, not
+the hosted api is still supported, but it is opt-in: `PERSISTENT_MODE=cloud` plus
+`PERSISTENT_API_KEY`. that switch exists so the same code can run either side, not
 because it is the default.
 
-the hard requirement is **nested virtualization**: `celesto doctor --strict` must
-pass. a plain cloud sandbox (tenki, e2b, most CI runners) gives you a VM without
-`/dev/kvm`, so celesto's microVMs cannot boot there. that is not a clawcrew
+the hard requirement is **nested virtualization**: `persistent doctor --strict` must
+pass. a plain cloud sandbox (tenki, ephemeral, most CI runners) gives you a VM without
+`/dev/kvm`, so persistent's microVMs cannot boot there. that is not a clawcrew
 limitation, it is what a microVM needs. run persistent computers on a host that has
 it, and use the disposable sandboxes for build and test work.
 
 in containers: a microVM needs `/dev/kvm`. build with
-`--build-arg INSTALL_CELESTO=true` and map the device, as the comment in
+`--build-arg INSTALL_PERSISTENT=true` and map the device, as the comment in
 `docker-compose.yml` shows. for most deployments the worker runs on the host and the
 api runs in the container, which needs nothing extra.
 
-## compute: e2b, self-hosted
+## compute: ephemeral, self-hosted
 
-e2b's runtime is Apache-2.0 and self-hostable. point clawcrew at it:
+ephemeral's runtime is Apache-2.0 and self-hostable. point clawcrew at it:
 
 ```bash
-E2B_BASE_URL=http://localhost:3000   # your instance's api
-E2B_API_KEY=<the key your deployment generates>
-pip install -e ".[e2b]"              # exec goes over envd, which is their sdk's hop
+EPHEMERAL_BASE_URL=http://localhost:3000   # your instance's api
+EPHEMERAL_API_KEY=<the key your deployment generates>
+pip install -e ".[ephemeral]"              # exec goes over envd, which is their sdk's hop
 ```
 
-the sandbox lifecycle (create/get/pause/resume/connect/delete) runs on e2b's own
-generated client, vendored in `clawcrew/vendor/e2b_api`. command execution goes over
+the sandbox lifecycle (create/get/pause/resume/connect/delete) runs on ephemeral's own
+generated client, vendored in `clawcrew/vendor/ephemeral_api`. command execution goes over
 envd rather than the REST api, so it needs their sdk; the adapter says exactly that
 instead of inventing a route.
 
@@ -89,7 +89,7 @@ are documented in `THIRD_PARTY.md`.
 ## what is still someone else's cloud
 
 nothing required. optional: a hosted llm endpoint (`CLAWCREW_LLM_BASE_URL`), and
-celesto cloud if you switch `CELESTO_MODE`.
+persistent cloud if you switch `PERSISTENT_MODE`.
 
 tenki is deliberately **not** a provider. it is what we use to test this repo on a
 clean machine: `tenki sandbox create`, clone, `pip install -e ".[dev]"`, run the

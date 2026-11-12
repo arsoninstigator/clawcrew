@@ -25,8 +25,8 @@ clawcrew/
 ├── shifts.py                  rotation, on duty, handoff bundles, acceptance
 ├── triggers.py                event + condition + action, and the packs
 ├── workflows.py               the dag engine, validation, gates, publishing
-├── scheduler.py               cron, the job queue, the worker, celery beat
-├── jobs.py                    the celery app, one task
+├── scheduler.py               cron, the job queue, the worker, schedule beat
+├── jobs.py                    the schedule app, one task
 ├── orchestrator.py            the run loop: provider, turns, tools, review
 ├── runtime.py                 the model behind a run, deterministic or an http llm
 ├── importers.py               workflows somebody else already wrote (n8n, dify)
@@ -34,9 +34,9 @@ clawcrew/
 │
 ├── sandbox/                   provider registry and the providers themselves
 │   ├── base.py                the interface every provider satisfies
-│   ├── celesto.py celesto_local.py    hosted microVMs, and the same runtime locally
-│   ├── e2b.py e2b_create.py   ephemeral sandboxes
-│   ├── superserve.py          opt in, their runtime, their sdk
+│   ├── persistent.py persistent_local.py    hosted microVMs, and the same runtime locally
+│   ├── ephemeral.py ephemeral_create.py   ephemeral sandboxes
+│   ├── hosted.py          opt in, their runtime, their sdk
 │   ├── docker.py ssh.py k8s.py        your own iron
 │   ├── provision.py           native byoc provisioning: plan, apply, destroy, connect
 │   └── transport.py           the one http client every provider shares
@@ -50,7 +50,7 @@ clawcrew/
 ├── manage/                    operating the crew
 │   ├── approvals/             gates: signed links, one tap, no login
 │   ├── knowledge/             workspace adapters and supervisor granted access
-│   └── agent_vault/           brokered credentials: a grant, never a key
+│   └── credential_broker/           brokered credentials: a grant, never a key
 │
 ├── work/                      the work itself
 │   └── overnight/             the brief: numbers from rows, prose checked against them
@@ -69,7 +69,7 @@ handed, never through an import cycle. if you need two services to talk, wire it
 
 **one service, one file.** the services that grew their own folder (`create/`, `manage/`,
 `work/`) are the ones with more than one concern inside them: coordination has a contract
-and two backends, agent_vault has grants and egress policy, overnight has a brief and its
+and two backends, credential_broker has grants and egress policy, overnight has a brief and its
 digest. a service that is one idea stays one module at the top.
 
 **no secrets in rows.** a connector stores the *name* of the variable a secret arrives in,

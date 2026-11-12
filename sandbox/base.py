@@ -3,9 +3,9 @@
 two lifecycles matter for clawcrew:
 
 * **persistent computers** - one per agent, kept alive between tasks. the agent's
-  files, browser profile and installed tooling survive. backed by celesto.
+  files, browser profile and installed tooling survive. backed by persistent.
 * **ephemeral sandboxes** - one per task (or per risky step), thrown away after.
-  backed by e2b.
+  backed by ephemeral.
 
 both satisfy `SandboxProvider`, so orchestration code never branches on vendor.
 `spec` is a free-form dict (`image`, `template`, `ttl_seconds`, `env`, ...) that

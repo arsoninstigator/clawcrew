@@ -30,32 +30,32 @@ built: `runtime` json on each agent (`computer`, `provider`, `image`,
 `skills` + `tools` on the agent and `required_skills` on the task, matched by the
 selector.
 
-## celesto → persistent computers
+## persistent → persistent computers
 
 an agent's computer is created once and kept: files, packages and browser profile
 survive between tasks. that persistence is what makes "the writer remembers the
 brief it wrote last week" real rather than prompt stuffing.
 
-built: `sandbox/celesto.py` behind `SandboxProvider`, plus `computers` rows keyed by
+built: `sandbox/persistent.py` behind `SandboxProvider`, plus `computers` rows keyed by
 agent. `LocalProvider` reproduces the same lifecycle on disk for development.
 
-## e2b → ephemeral sandboxes
+## ephemeral → ephemeral sandboxes
 
 anything an agent might break runs in a throwaway box. task-level
-`isolation: "ephemeral"` sends the run to e2b instead of the agent's computer, and
+`isolation: "ephemeral"` sends the run to ephemeral instead of the agent's computer, and
 the sandbox is destroyed in a `finally` block whether the run succeeded or raised.
 
-built: `sandbox/e2b.py`, `Handle.kind == "ephemeral"`, destroy-on-exit. the test
+built: `sandbox/ephemeral.py`, `Handle.kind == "ephemeral"`, destroy-on-exit. the test
 suite asserts the directory is gone after the run.
 
-## zop.dev / celery → scheduling
+## zop.dev / schedule → scheduling
 
 kept the semantics in sqlite (`schedules` + `job_queue`) and made the transport
-swappable. `InProcBroker` is the default and needs no infra; `CeleryBroker` pushes
+swappable. `InProcBroker` is the default and needs no infra; `ScheduleBroker` pushes
 job ids to an existing cluster. cron is a real 5-field matcher (`*/15`, ranges,
 lists, dow) with a bounded search, not a cron-syntax library.
 
-why not celery beat directly: beat owns its own schedule store, which forks the
+why not schedule beat directly: beat owns its own schedule store, which forks the
 source of truth. one table, one truth, any number of workers.
 
 ## orchestrator.inc / a2a → the message bus
@@ -72,7 +72,7 @@ took the parts that make agent boards usable and skipped the ui: per-crew column
 a validated transition table (no `backlog → done`), an append-only event log per
 card, and a `review` column that is a real gate rather than decoration.
 
-## n8n / langflow / dify → workflow definitions
+## n8n / workflows / dify → workflow definitions
 
 the definition is `{nodes: [...]}` with five types and a `depends_on` graph. saving
 validates duplicates, dangling deps, unknown types and cycles. execution is
@@ -82,7 +82,7 @@ topological, supports `${trigger.x}` / `${node.field}` templating, pauses on
 that json is the integration point: an n8n-style canvas renders and edits it, this
 engine runs it. no lock-in in either direction.
 
-## ando.so / buzz (block) → agent-only channels
+## ando.so / relay (block) → agent-only channels
 
 not wired as transports. what they imply is that agent conversation is a first-class
 channel with its own retention and review story, so messages are their own table

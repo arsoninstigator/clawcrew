@@ -41,8 +41,8 @@ still shows everything. rooms are flat on purpose.
 
 ### computer
 a persistent sandbox per agent, provisioned once and reused. the agent's files and
-installed tooling survive between tasks. this is the celesto lifecycle, and by default it
-is celesto's OSS runtime on your own machine (`pip install celesto`, named microVMs, no
+installed tooling survive between tasks. this is the persistent lifecycle, and by default it
+is persistent's OSS runtime on your own machine (`pip install persistent`, named microVMs, no
 account). see `SELF_HOSTING.md`.
 
 ### connector
@@ -56,7 +56,7 @@ department, and every read lands in the agent's audit chain. `GET
 leases and streams, so two agents cannot both claim the same card and an agent can read
 what happened before it woke up. the contract is `claim`, `release`, `append`, `read`;
 the tested backend today is the same sqlite file as everything else, and
-`create/coordination/durable_actors.py` carries the transport plan for a self-hosted
+`create/coordination/durableobjects.py` carries the transport plan for a self-hosted
 durable actors runtime.
 
 ### crew
@@ -127,9 +127,9 @@ answer to "who is on the bar right now" (`slot_index = (now - anchor) // slot`, 
 so a duplicated beat cannot skew it and a missed beat cannot skip someone's shift.
 
 ### target
-where an agent's compute comes from. `local` runs the celesto OSS runtime on this
-machine, `celesto` and `e2b` are their hosted APIs, `docker`, `ssh`, `k8s` and the
-terraform targets for aws, gcp, azure and oracle are byoc, and `superserve` is the one
+where an agent's compute comes from. `local` runs the persistent OSS runtime on this
+machine, `persistent` and `ephemeral` are their hosted APIs, `docker`, `ssh`, `k8s` and the
+terraform targets for aws, gcp, azure and oracle are byoc, and `hosted` is the one
 target whose runtime is somebody else's cloud, so it is opt in and driven only through
 their published sdk. `clawcrew get persistent|disposable` plans a target, and
 `--apply` is the only flag that creates anything.
@@ -141,7 +141,7 @@ event, so the board is an audit log with a current-state projection.
 ### trigger
 when this happens, queue that. `event` + exact-match `condition` + `action` + `payload`
 with `${path}` placeholders. card moves, room messages, finished workflows and the
-nightly beat all reach the same engine, and the queue is celery's or the sqlite one.
+nightly beat all reach the same engine, and the queue is schedule's or the sqlite one.
 `install_pack` adds a reviewed set of rules (the overnight pack) in one idempotent call,
 and `trigger_log` is the answer to "what actually fired last night".
 
@@ -153,7 +153,7 @@ dify.
 
 ## board
 
-the project management a crew shares, run on itsaplan. projects hold issues, and an agent is
+the project management a crew shares, run on manage. projects hold issues, and an agent is
 a member with a role and an assignee slot, so assigning an issue to an agent is the same
 gesture as assigning it to a person. clawcrew holds an api key per agent and pulls.
 
@@ -167,6 +167,28 @@ because a run left open blocks the issue for everyone else.
 ## node or service
 
 a node is a step inside a workflow: n8n and dify are nodes. a service is something an agent
-calls itself, whenever it decides to: the browser, the sandbox, langflow for a flow, and the
+calls itself, whenever it decides to: the browser, the sandbox, workflows for a flow, and the
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
+
+## the four roots
+
+the tree has four roots for things that came from outside, and the difference between them
+is who owns the thing, not how big it is.
+
+- **an ingredient** is baked in: the platform runs it, its state is the platform's, and it
+  is named for what it does (`persistent`, `ephemeral`, `hosted`, `browser`, `schedule`,
+  `durableobjects`, `workflows`, `manage`, `kanban`, `credential broker`). an agent does not
+  carry ingredients; it gets one computer and one transport and asks the platform for the
+  rest, which is what `docker build --target agent-vm` proves.
+- **a toolbox entry** is called: your daemon, your key, over its own api, never copied in.
+  the licence is usually why (an agpl tool stays at arm's length), and the shape each one
+  has is `configured()`, a `status()` that says what is missing, one method per call that
+  returns a plain dict, and a `ProviderFailure` on anything that is not 2xx. `firecrawl` is
+  the worked example.
+- **workbench** is where an agent composes its own steps out of toolbox entries. not built.
+- **infrastructure** is how the platform itself is deployed. not built.
+
+nothing under those four roots is imported by an agent vm, and the boundary test reads the
+dockerfile to keep it that way. the upstream project behind an ingredient is named in
+`clawcrew/thirdparty.md` and in that ingredient's `PROVENANCE.md`, nowhere else.

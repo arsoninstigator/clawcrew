@@ -2,7 +2,7 @@
 
 ![clawcrew](clawcrew/docs/clawcrew.png)
 
-> agent crews that take shifts, hold cards, and sign their own work»
+> agent crews that take shifts, hold cards, and sign their own work
 
 ## what is this
 
@@ -49,29 +49,55 @@ crew
 
 ## under the hood
 
-python, fastapi, sqlite. one process serves http, one drains the queue, one ticks. swap in
-celery when you need more. providers are your own iron first (local microvms, docker, ssh,
+python, fastapi, sqlite. one process serves http, one drains the queue, one ticks. swap in a
+broker when you need more. providers are your own iron first (local microvms, docker, ssh,
 k8s, terraform) and somebody else's cloud only when you opt in.
 
-the board is itsaplan, self-hosted: projects, issues, and agents as members with an assignee
+the board is `manage`, self-hosted: projects, issues, and agents as members with an assignee
 slot, so a crew and a person look the same to a project. a crew pulls from it by claiming a
-run, and the board decides what woke it up. that is a service the agents call, not a node in
-a workflow, and the same rule holds for the rest: n8n and dify are node types because they
-are steps inside a flow, langflow is a flow service an agent calls when it wants one.
+run, and the board decides what woke it up.
+
+## the parts
+
+four roots, and the difference between them is who owns the thing:
+
+```
+ingredients/   baked in. the platform runs it and hands it to an agent by capability:
+               machines/{persistent,ephemeral,hosted}, browser, schedule, durableobjects,
+               workflows, projectmanagement/{manage,kanban}, credentials/credential-broker
+toolbox/       called. someone else's daemon over its own api, never copied in: the two
+               workflow engines, and firecrawl as the worked example of a tool an agent
+               calls (scrape, crawl, map, through your own key)
+workbench/     later: where an agent composes its own steps out of toolbox entries
+infrastructure/ later: how the platform itself is deployed
+```
+
+an ingredient is named for what it does, not for the project it came from. `persistent` and
+`ephemeral` are machines, `browser` is a page, `schedule` is the queue, `workflows` is a
+flow, `manage` is the board, the credential broker is how an agent borrows a key without
+holding one. `clawcrew/thirdparty.md` is the one file that names upstreams, and it is also
+the argued case for every licence here.
+
+**an agent vm gets none of it.** the platform carries ingredients because the platform is
+what runs them. an agent gets one computer and one transport, and asks the platform for the
+rest. `docker build --target agent-vm` is the proof: there is no `ingredients/` in that
+image, and a test asserts it.
 
 ## where things live
 
 ```
-agents/ comms/ work/ org/ manage/ create/ sandbox/ integrations/   the code
-core/ api/                                                         wiring and the http surface
-clawcrew/                                                          glossary, docs, concept, licences, tests
-get/                                                               how to run it, one folder per way in
-configure.md                                                       every env var, and what it does
+agents/ comms/ work/ org/ manage/ create/ sandbox/   the platform's own code
+ingredients/                                        baked in, renamed for what it does
+toolbox/                                            called over an api, never copied in
+core/ api/                                          wiring and the http surface
+clawcrew/                                           glossary, docs, concept, credits, tests
+get/                                                how to run it, one folder per way in
+configure.md                                        every env var, and what it does
 ```
 
 ## status
 
-it runs, it is tested (550 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (560 tests, no network, no sleeps), and it is honest about what is
 not done: the postgres adapter, env injection into sandboxes, and the npm and mcp entry
 points in `get/`. see `clawcrew/docs/remaining.md`.
 
