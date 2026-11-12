@@ -1,18 +1,31 @@
 # the platform image: everything, because the platform is what runs ingredients.
-from python:3.11-slim
+# named, because the agent vm is the last stage in this file: a bare `docker build .`
+# would otherwise produce the agent vm and the api container would start with no api.
+from python:3.11-slim as platform
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 CLAWCREW_DB=/data/clawcrew.db
 
 COPY pyproject.toml README.md ./
-COPY core api agents work comms org manage create sandbox ingredients toolbox ./
+# one line per package, because `COPY a b ./` copies their *contents* into the target and
+# the image then builds and starts with no `api` module
+COPY core ./core
+COPY api ./api
+COPY agents ./agents
+COPY work ./work
+COPY comms ./comms
+COPY org ./org
+COPY manage ./manage
+COPY create ./create
+COPY sandbox ./sandbox
+COPY ingredients ./ingredients
+COPY toolbox ./toolbox
 # the cluster extra, because the worker and beat containers run the broker's binary
 RUN pip install --no-cache-dir -e ".[schedule]"
 
-# the persistent runtime boots local microVMs, so it wants the host's /dev/kvm.
-# off by default: build with --build-arg INSTALL_PERSISTENT=true and map the device.
-ARG INSTALL_PERSISTENT=false
-RUN if [ "$INSTALL_PERSISTENT" = "true" ]; then pip install --no-cache-dir persistent-runtime; fi
+# the persistent runtime is not installed here on purpose: it boots microVMs, so it wants
+# the host's /dev/kvm and belongs on the host rather than in this image. `docker-compose.yml`
+# says the same thing in a comment a deployer will actually read.
 
 RUN mkdir -p /data
 EXPOSE 8000

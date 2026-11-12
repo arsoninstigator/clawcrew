@@ -18,7 +18,11 @@
 
 services:
   api:
-    build: .
+    # `target: platform` is not optional: the agent vm is the last stage in the dockerfile,
+    # so a bare `build: .` produces the agent's harness and this container starts with no api
+    build:
+      context: .
+      target: platform
     ports: ["8000:8000"]
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
@@ -33,7 +37,9 @@ services:
 
   # executes queued work: task dispatches, workflow runs, trigger actions
   worker:
-    build: .
+    build:
+      context: .
+      target: platform
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
     command: ["celery", "-A", "ingredients.schedule.jobs", "worker", "-Q", "clawcrew", "--loglevel=info", "--concurrency=2"]
@@ -45,7 +51,9 @@ services:
 
   # the clock: tick every 15s, nightly at 02:00 UTC
   beat:
-    build: .
+    build:
+      context: .
+      target: platform
     env_file: [.env]
     volumes: ["clawcrew-data:/data"]
     command: ["celery", "-A", "ingredients.schedule.jobs", "beat", "--loglevel=info"]

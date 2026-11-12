@@ -81,6 +81,39 @@ class IngredientBoundaryTests(unittest.TestCase):
             self.assertTrue((ROOT / rel / "__init__.py").exists() or list((ROOT / rel).glob("*.py")),
                             f"{rel} has no python in it")
 
+    def test_the_platform_stage_is_named_and_the_deploy_asks_for_it(self):
+        """the agent vm is the last stage, so a bare build produces the harness. every
+        service in docker-compose therefore names the platform stage, or the api
+        container comes up with no api in it."""
+        self.assertIn("as platform", DOCKERFILE.read_text(), "the platform stage needs a name")
+
+        lines = [
+            line.strip()
+            for line in (ROOT / "docker-compose.yml").read_text().splitlines()
+            if not line.strip().startswith("#")
+        ]
+        self.assertEqual(
+            len([line for line in lines if line == "target: platform"]), 3,
+            "api, worker and beat all build the platform",
+        )
+        self.assertEqual(
+            [line for line in lines if line == "build: ."], [],
+            "build: . builds the agent vm; every service needs a target",
+        )
+
+    def test_a_copy_does_not_flatten_the_packages_it_copies(self):
+        """`COPY core api ./` copies both directories' contents into the image root, so
+        the image builds and starts with no `api` module."""
+        for line in DOCKERFILE.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped.upper().startswith("COPY"):
+                continue
+            args = [a for a in stripped.split()[1:] if not a.startswith("--")]
+            sources, destination = args[:-1], args[-1]
+            directories = [s for s in sources if (ROOT / s).is_dir()]
+            if directories and destination.rstrip("/") in {".", ""}:
+                self.fail(f"flattening copy: {stripped}")
+
     def test_the_platform_is_the_only_thing_that_names_an_upstream(self):
         # the credits file is the one place a project name may appear
         credits = (ROOT / "clawcrew" / "thirdparty.md").read_text().lower()
