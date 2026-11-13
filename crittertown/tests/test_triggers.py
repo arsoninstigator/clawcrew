@@ -49,7 +49,7 @@ class TriggerRuleTests(AppCase):
             condition="task.column=review",
         )
         card = self.task(self.team["id"], "draft", column="in_progress")
-        self.kanban.move(card["id"], "review", actor="writer")
+        self.kanban.move(card["id"], "review", actor="owner")
         jobs = self.jobs()
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0]["kind"], "task")
@@ -62,7 +62,7 @@ class TriggerRuleTests(AppCase):
             condition="task.column=done",
         )
         card = self.task(self.team["id"], "draft", column="in_progress")
-        self.kanban.move(card["id"], "review", actor="writer")
+        self.kanban.move(card["id"], "review", actor="owner")
         self.assertEqual(self.jobs(), [])
 
     def test_a_disabled_rule_is_skipped(self):
@@ -72,7 +72,7 @@ class TriggerRuleTests(AppCase):
         )
         self.app.triggers.set_enabled(trigger["id"], False)
         card = self.task(self.team["id"], "draft", column="in_progress")
-        self.kanban.move(card["id"], "review", actor="writer")
+        self.kanban.move(card["id"], "review", actor="owner")
         self.assertEqual(self.jobs(), [])
         self.assertEqual(self.app.triggers.get(trigger["id"])["fired_count"], 0)
 
@@ -116,8 +116,8 @@ class TriggerRuleTests(AppCase):
             payload={"task_id": "${task.id}"},
         )
         card = self.task(self.team["id"], "a", column="in_progress")
-        self.kanban.move(card["id"], "review", actor="writer")
-        self.kanban.move(card["id"], "in_progress", actor="writer")
+        self.kanban.move(card["id"], "review", actor="owner")
+        self.kanban.move(card["id"], "in_progress", actor="owner")
         refreshed = self.app.triggers.get(trigger["id"])
         self.assertEqual(refreshed["fired_count"], 2)
         self.assertIsNotNone(refreshed["last_fired_at"])

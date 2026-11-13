@@ -146,6 +146,14 @@ class CredentialBroker:
                 "no credential proxy configured; set CREDENTIAL_BROKER_PROXY_URL or pass proxy_url"
             )
         scopes = [s.strip().lower() for s in (scopes or []) if str(s).strip()]
+        if not scopes:
+            # a grant with no scopes used to mean "the proxy decides", which is a policy
+            # this service cannot see, cannot test and cannot promise. default deny is
+            # the only version of this that is true.
+            raise ValidationError(
+                "a grant needs at least one scope (a host suffix), because a grant with no "
+                "scopes allows every host and this service cannot enforce what it did not write"
+            )
         hours = float(expires_hours if expires_hours is not None
                       else getattr(self.settings, "vault_ttl_hours", 24) or 24)
         stamp = now()
@@ -202,22 +210,29 @@ class CredentialBroker:
     def egress_allowed(self, agent_id: str, host: str) -> dict:
         """may this agent reach this host through the broker, and why not if not.
 
-        a grant with no scopes does not claim to police hosts: the proxy's own service
-        rules do. a grant with scopes is enforced here as well, so a scoped grant cannot
-        be widened by editing the proxy.
+        default deny. a host is reachable only when a live grant names a scope that
+        matches it, so widening the proxy cannot widen an agent. a grant written before
+        scopes were required is denied rather than trusted, and says so.
+
+        this is the decision the proxy asks for (`POST /vault/egress`). it is only worth
+        the word "enforced" because sandboxes are handed the proxy as `HTTP(S)_PROXY`
+        (see `sandbox_env`), so their traffic has no other road out. an agent that can
+        reach the network without the proxy is outside this check, and that is a
+        perimeter problem, not a broker one.
         """
         grants = self.active(agent_id)
         if not grants:
             return {"allowed": False, "reason": "no active vault grant for this agent"}
         for grant in grants:
             if not grant["scopes"]:
-                return {"allowed": True, "grant": grant["id"],
-                        "reason": "unscoped grant: the proxy decides"}
+                continue  # legacy unscoped grant: denied, not deferred
             if any(_host_matches(scope, host) for scope in grant["scopes"]):
                 return {"allowed": True, "grant": grant["id"], "reason": "scope matched"}
+        scopes = sorted({s for g in grants for s in g["scopes"]})
         return {"allowed": False,
-                "reason": f"{host} is not in any scope of this agent's grants",
-                "scopes": sorted({s for g in grants for s in g["scopes"]})}
+                "reason": (f"{host} is not in any scope of this agent's grants" if scopes
+                           else "this agent's grants carry no scopes, so nothing is allowed"),
+                "scopes": scopes}
 
     def sandbox_env(self, agent_id: str, env: Mapping[str, str] | None = None) -> dict:
         """the variables to hand a sandbox at spawn time.

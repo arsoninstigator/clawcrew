@@ -30,7 +30,7 @@ class VaultTests(VaultCase):
         bare = self.app.vault
         bare.settings = Settings(database_path=self.settings.database_path)
         with self.assertRaises(ProviderNotConfigured):
-            bare.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+            bare.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         self.assertFalse(bare.health()["configured"])
         self.assertIn("CREDENTIAL_BROKER_PROXY_URL", bare.health()["note"])
 
@@ -50,19 +50,19 @@ class VaultTests(VaultCase):
             self.app.vault.grant(self.wren["id"], label="x", token_env="not a name")
 
     def test_the_sandbox_gets_a_proxy_and_a_token(self) -> None:
-        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         env = self.app.vault.sandbox_env(self.wren["id"], env=self.env)
         self.assertEqual(env["HTTPS_PROXY"], "http://agent-vault:14322")
         self.assertEqual(env["HTTP_PROXY"], "http://agent-vault:14322")
         self.assertEqual(env["WREN_VAULT_TOKEN"], "tok_wren_123")
 
     def test_a_missing_token_variable_is_loud(self) -> None:
-        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         with self.assertRaises(ProviderNotConfigured):
             self.app.vault.sandbox_env(self.wren["id"], env={})
 
     def test_the_described_env_masks_the_value(self) -> None:
-        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         described = self.app.vault.describe_env(self.wren["id"], env=self.env)
         self.assertEqual(described["env"]["WREN_VAULT_TOKEN"], "<set>")
         self.assertNotIn("tok_wren_123", str(described))
@@ -79,14 +79,29 @@ class VaultTests(VaultCase):
         self.assertFalse(verdict["allowed"])
         self.assertIn("scopes", verdict)
 
-    def test_an_unscoped_grant_defers_to_the_proxy(self) -> None:
-        self.app.vault.grant(self.wren["id"], label="all", token_env="WREN_VAULT_TOKEN")
+    def test_a_scope_does_not_cover_the_whole_internet(self) -> None:
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN",
+                             scopes=["github.com"])
+        self.assertTrue(self.app.vault.egress_allowed(self.wren["id"], "api.github.com")["allowed"])
         verdict = self.app.vault.egress_allowed(self.wren["id"], "anything.example")
-        self.assertTrue(verdict["allowed"])
-        self.assertIn("proxy", verdict["reason"])
+        self.assertFalse(verdict["allowed"])
+        self.assertIn("not in any scope", verdict["reason"])
+
+    def test_an_unscoped_grant_is_refused_at_the_door(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.app.vault.grant(self.wren["id"], label="all", token_env="WREN_VAULT_TOKEN")
+
+    def test_a_legacy_unscoped_row_denies_rather_than_defers(self) -> None:
+        grant = self.app.vault.grant(self.wren["id"], label="legacy",
+                                     token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
+        with self.app.store.tx() as c:
+            c.execute("update credential_broker set scopes = '[]' where id = ?", (grant["id"],))
+        verdict = self.app.vault.egress_allowed(self.wren["id"], "github.com")
+        self.assertFalse(verdict["allowed"])
+        self.assertIn("no scopes", verdict["reason"])
 
     def test_revoking_stops_the_next_spawn_and_keeps_the_record(self) -> None:
-        grant = self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        grant = self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         revoked = self.app.vault.revoke(grant["id"], actor="owner", reason="offboarded")
         self.assertEqual(revoked["status"], "revoked")
         self.assertEqual(self.app.vault.sandbox_env(self.wren["id"], env=self.env), {})
@@ -96,7 +111,7 @@ class VaultTests(VaultCase):
 
     def test_a_grant_in_the_past_is_expired_on_read(self) -> None:
         self.app.vault.grant(self.wren["id"], label="short", token_env="WREN_VAULT_TOKEN",
-                             expires_hours=-1)
+                             scopes=["github.com"], expires_hours=-1)
         self.assertEqual(self.app.vault.active(self.wren["id"]), [])
         self.assertEqual(self.app.vault.list(agent_id=self.wren["id"])[0]["status"], "expired")
 
@@ -111,7 +126,7 @@ class VaultTests(VaultCase):
         self.assertEqual(len(self.app.vault.list(agent_id=self.wren["id"])), 1)
 
     def test_every_change_lands_in_the_audit_chain(self) -> None:
-        grant = self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        grant = self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         self.app.vault.revoke(grant["id"])
         rows = self.app.store.query(
             "select action from agent_audit where agent_id = ? order by seq",
@@ -126,7 +141,8 @@ class VaultTests(VaultCase):
         self.app.vault.env = self.env
         client = TestClient(create_api(self.app))
         created = client.post(f"/agents/{self.wren['id']}/vault",
-                              json={"label": "github", "token_env": "WREN_VAULT_TOKEN"}).json()
+                              json={"label": "github", "token_env": "WREN_VAULT_TOKEN",
+                                    "scopes": ["github.com"]}).json()
         self.assertEqual(created["status"], "active")
         listed = client.get(f"/agents/{self.wren['id']}/vault").json()
         self.assertNotIn("tok_wren_123", str(listed))

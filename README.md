@@ -118,7 +118,7 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (717 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (739 tests, no network, no sleeps), and it is honest about what is
 not done: the npm and mcp entry points in `get/`, the adapter that mints a code from
 proton pass or bitwarden when a gate is approved, and the second half of the canvas (the
 workflow editor). `crittertown/docs/directive.md` covers what autonomy rests on: intent,

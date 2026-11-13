@@ -16,14 +16,22 @@ from core.errors import NotFound, ValidationError
 
 DEFAULT_COLUMNS = ["backlog", "ready", "in_progress", "review", "done", "blocked"]
 
+# `done` is reachable only from `review`, and `review` only from `in_progress`. that is
+# the review gate as a table instead of a convention: an agent that finishes a card can
+# put it in review, and it cannot put it in done, because there is no edge to walk.
 TRANSITIONS = {
     "backlog": {"ready", "blocked"},
     "ready": {"in_progress", "backlog", "blocked"},
-    "in_progress": {"review", "done", "blocked", "ready"},
+    "in_progress": {"review", "blocked", "ready"},
     "review": {"done", "in_progress", "blocked"},
     "blocked": {"ready", "backlog", "in_progress"},
     "done": {"in_progress"},
 }
+
+
+# actors that are not agents. `owner` is a person at the api, and the rest are the
+# platform's own services, which each have their own gate or lint before they move a card.
+INTERNAL_ACTORS = {"owner", "system", "saga", "intake", "orchestrator", "scheduler"}
 
 
 class KanbanService:
@@ -165,6 +173,44 @@ class KanbanService:
             return allowed
         return {name for name in self.columns(team_id) if name != column}
 
+    def _check_actor(self, task: dict, actor: str, column: str) -> None:
+        """who is allowed to move this card here.
+
+        three rules, and the third is the gate: an actor must exist, a guardrail cannot
+        be impersonated from a request body, and the agent whose work it is cannot be the
+        one who signs it off. the last one is the whole reason review is worth having, so
+        it is refused rather than trusted.
+        """
+        actor = (actor or "").strip()
+        if not actor:
+            raise ValidationError("a card move needs an actor")
+        if actor in INTERNAL_ACTORS or actor.startswith("guardrail:"):
+            pass
+        else:
+            row = self.store.one("select team_id from agents where id = ?", (actor,))
+            if not row:
+                raise ValidationError(
+                    f"unknown actor '{actor}': use an agent id in this crew, or one of "
+                    f"{sorted(INTERNAL_ACTORS)}")
+            if row["team_id"] != task["team_id"]:
+                raise ValidationError(
+                    f"agent {actor} belongs to another crew and cannot move this card")
+        if column == "done" and actor not in INTERNAL_ACTORS and not actor.startswith("guardrail:"):
+            if task.get("assignee_agent_id") and actor == task["assignee_agent_id"]:
+                raise ValidationError(
+                    "an agent cannot approve its own work: review -> done needs the owner "
+                    "or another agent",
+                    task_id=task["id"], actor=actor)
+
+    def approve(self, task_id: str, actor: str, note: str = "") -> dict:
+        """walk a card to done the long way, so the gate is walked and not skipped."""
+        task = self.get_task(task_id)
+        if task["column"] == "in_progress":
+            task = self.move(task_id, "review", actor, note=note)
+        if task["column"] != "done":
+            task = self.move(task_id, "done", actor, note=note)
+        return task
+
     def move(self, task_id: str, column: str, actor: str = "system", note: str = "") -> dict:
         task = self.get_task(task_id)
         columns = self.columns(task["team_id"])
@@ -178,6 +224,7 @@ class KanbanService:
             raise ValidationError(
                 f"illegal transition {current} -> {column}", allowed=sorted(allowed)
             )
+        self._check_actor(task, actor, column)
         patch = {"review_note": note} if note and column == "review" else {}
         with self.store.tx() as c:
             c.execute(
@@ -215,7 +262,14 @@ class KanbanService:
                 (dumps(result or {}), now(), task_id),
             )
         self._event(task_id, "result", actor, {"result": result or {}})
-        return self.move(task_id, column, actor)
+        if column != "done":
+            return self.move(task_id, column, actor)
+        # finishing work is not approving it. walk the gate if this actor may, and park
+        # in review if it may not, which is what an agent gets.
+        try:
+            return self.approve(task_id, actor)
+        except ValidationError:
+            return self.move(task_id, "review", actor)
 
     def events(self, task_id: str) -> list[dict]:
         self.get_task(task_id)

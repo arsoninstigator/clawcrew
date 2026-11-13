@@ -52,7 +52,7 @@ class LocalProviderTests(AppCase):
 
     def test_timeout_is_reported_as_exit_124(self):
         handle = self.provider.ensure("agent:four", {"kind": "persistent"})
-        result = self.provider.exec(handle, "bash -c 'sleep 5'", timeout=1)
+        result = self.provider.exec(handle, "sleep 5", timeout=1)
         self.assertEqual(result.exit_code, 124)
         self.assertIn("timed out", result.stderr)
 

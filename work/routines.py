@@ -260,7 +260,7 @@ class RoutineService:
         return missed
 
     def complete(self, routine_id: str, on: str | None = None, notes: str = "",
-                 actor: str = "operator") -> dict:
+                 actor: str = "owner") -> dict:
         """the routine happened. close the receipt and, when the card is still there,
         move it to done so the board agrees with the routine."""
         routine = self.get(routine_id)
@@ -289,8 +289,23 @@ class RoutineService:
             task = self.kanban.get_task(task_id)
         except NotFound:
             return
-        for column in _path_to_done(task["column"]):
-            self.kanban.move(task_id, column, actor)
+        # walk to review first, because a routine's card starts in ready and the board
+        # has no edge from ready to done
+        for column in _path_to_done(task["column"])[:-1]:
+            try:
+                self.kanban.move(task_id, column, actor)
+            except ValidationError:
+                break
+        try:
+            self.kanban.approve(task_id, actor)
+        except ValidationError:
+            # an agent cannot sign off its own work, so an agent-completed routine parks
+            # in review. that is the gate doing its job, and the receipt still records
+            # that the work happened.
+            try:
+                self.kanban.move(task_id, "review", actor)
+            except (ValidationError, NotFound):
+                pass
 
     def summary(self, team_id: str, days: int = 7, on: str | None = None) -> dict:
         """kept against missed, per routine, because a routine that is 80 percent kept

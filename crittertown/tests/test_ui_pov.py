@@ -18,8 +18,10 @@ ROUTE_TABLE = re.compile(r"var R = \{(.*?)\};", re.S)
 ENTRY = re.compile(r'(\w+):\s*"([^"]+)"')
 
 # the only writes the shell is allowed: a card move, a calendar block, a profile value,
-# a revoked grant. everything else it renders is read-only by construction.
-WRITES = {"moveTask", "calendar", "profileEntry", "grant"}
+# a revoked grant, closing a routine's receipt, pausing a routine, and pausing a limit.
+# everything else it renders is read-only by construction.
+WRITES = {"moveTask", "calendar", "profileEntry", "grant", "routineDone", "routinePause",
+          "materialise", "guardrail"}
 
 
 def routes_in(page: str) -> dict[str, str]:
@@ -49,9 +51,15 @@ class PageShapeTests(unittest.TestCase):
 
     def test_the_page_writes_only_where_it_is_allowed_to(self):
         methods = re.findall(r'method:\s*"(\w+)"', POV_PAGE)
-        self.assertEqual(sorted(methods), ["DELETE", "POST", "POST", "PUT"])
+        self.assertEqual(sorted(methods),
+                         ["DELETE", "DELETE", "POST", "POST", "POST", "POST", "POST", "PUT"])
         for name in WRITES:
             self.assertIn(name, routes_in(POV_PAGE))
+
+    def test_the_new_views_are_in_the_shell(self):
+        self.assertIn('"routines","guardrails"', POV_PAGE)
+        self.assertIn("a missed routine reads as missed", POV_PAGE)
+        self.assertIn("refused today", POV_PAGE)
 
     def test_a_save_shows_the_value_it_stores_not_a_merge(self):
         self.assertIn("there is no merged preview", POV_PAGE)

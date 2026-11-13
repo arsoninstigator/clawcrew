@@ -105,11 +105,17 @@ var R = {
   grants: "agents/{agent}/grants",
   grant: "agents/{agent}/grants/{kind}/{resource}",
   isolation: "crews/{team}/isolation",
-  moveTask: "tasks/{task}/move"
+  moveTask: "tasks/{task}/move",
+  routines: "crews/{team}/routines",
+  routineDone: "routines/{routine}/done",
+  routinePause: "routines/{routine}/pause",
+  materialise: "crews/{team}/routines/materialise",
+  guardrails: "crews/{team}/guardrails",
+  guardrail: "guardrails/{rail}"
 };
 
 var NAMESPACES = ["skills","scope","memory","instructions","knowledge","perms","tools","vertical","spawn"];
-var VIEWS = ["board","calendar","inbox","runs","profile","computer","access"];
+var VIEWS = ["board","calendar","inbox","runs","profile","computer","access","routines","guardrails"];
 
 var state = { crews: [], team: null, channels: [], agents: [], agent: null, view: "board" };
 
@@ -218,6 +224,8 @@ async function renderView() {
     else if (state.view === "profile") await renderProfile(view, params);
     else if (state.view === "computer") await renderComputer(view, params);
     else if (state.view === "access") await renderAccess(view, params);
+    else if (state.view === "routines") await renderRoutines(view, params);
+    else if (state.view === "guardrails") await renderGuardrails(view, params);
   } catch (err) {
     say(err.message, true);
     view.appendChild(el("div", { class: "panel" }, [
@@ -388,6 +396,87 @@ async function renderComputer(view, params) {
       text: JSON.stringify(computer, null, 2) }));
   }
   view.appendChild(panel);
+}
+
+async function renderRoutines(view, params) {
+  var data = await api(R.routines, { team: params.team });
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "routines" })]);
+  var today = data.today;
+  (data.routines || []).forEach(function (routine) {
+    var run = routine.run || {};
+    var line = el("div", { class: "card" }, [
+      el("div", { text: routine.name }),
+      el("div", { class: "meta", text: routine.cadence +
+        (routine.due_today ? " · due " + today : " · not due today") +
+        " · " + (run.status || "no receipt") })
+    ]);
+    if (run.status && run.status !== "done") {
+      line.appendChild(el("button", { text: "mark done", onclick: async function () {
+        try {
+          await api(R.routineDone, { routine: routine.id },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ notes: "marked done in the shell" }) });
+          say("receipt closed: " + routine.name);
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }}));
+    }
+    if (routine.status === "active") {
+      line.appendChild(el("button", { class: "warn", text: "pause", onclick: async function () {
+        try {
+          await api(R.routinePause, { routine: routine.id },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ status: "paused" }) });
+          say("paused " + routine.name);
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }}));
+    }
+    panel.appendChild(line);
+  });
+  if (!data.routines || !data.routines.length) {
+    panel.appendChild(el("div", { class: "muted", text: "no routines. a routine is what the crew owes every day, and the receipt is the point." }));
+  }
+  panel.appendChild(el("button", { text: "materialise today", onclick: async function () {
+    try {
+      var out = await api(R.materialise, { team: params.team }, { method: "POST" });
+      say("created " + (out.created || []).length + " card(s)");
+      renderView();
+    } catch (err) { say(err.message, true); }
+  }}));
+  view.appendChild(panel);
+  view.appendChild(el("div", { class: "muted",
+    text: "a missed routine reads as missed, not as absent: sweep writes the miss, so the summary has a denominator." }));
+}
+
+async function renderGuardrails(view, params) {
+  var data = await api(R.guardrails, { team: params.team });
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "guardrails" })]);
+  var today = data.summary || {};
+  var refused = today.refused || {};
+  var names = Object.keys(refused);
+  panel.appendChild(el("div", { class: "meta", text: names.length
+    ? "refused today: " + names.map(function (k) { return k + " " + refused[k]; }).join(", ")
+    : "nothing refused today" }));
+  (data.limits || []).forEach(function (limit) {
+    panel.appendChild(el("div", { class: "card" }, [
+      el("div", { text: limit.kind + " = " + JSON.stringify(limit.value) }),
+      el("div", { class: "meta", text: (limit.agent_id || "crew-wide") + " · " + limit.status }),
+      el("button", { class: "warn", text: "pause", onclick: async function () {
+        try {
+          await api(R.guardrail, { rail: limit.id }, { method: "DELETE" });
+          say("paused " + limit.kind);
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }})
+    ]));
+  });
+  if (!data.limits || !data.limits.length) {
+    panel.appendChild(el("div", { class: "muted", text: "no limits. an agent with no limits is a gate nobody is standing at." }));
+  }
+  view.appendChild(panel);
+  view.appendChild(el("div", { class: "muted",
+    text: "a limit answers without a person. it refuses before a card moves, and the refusal is counted apart from a failure." }));
 }
 
 async function renderAccess(view, params) {

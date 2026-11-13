@@ -69,8 +69,16 @@ review is not review.
 ## vibe-kanban / agent-kanban → board semantics
 
 took the parts that make agent boards usable and skipped the ui: per-crew columns,
-a validated transition table (no `backlog → done`), an append-only event log per
-card, and a `review` column that is a real gate rather than decoration.
+a validated transition table, an append-only event log per card, and a `review`
+column that is a gate in the table rather than a convention.
+
+that last part was wrong in the first version and is worth writing down: the table
+allowed `in_progress → done`, so review could be skipped, and `move()` believed
+whatever actor string it was handed, which defaulted to `owner`. a gate that a card can
+walk around is a column. it is enforced now, in three places: no edge into `done` from
+anywhere but `review`, an actor that has to exist and belong to the crew, and a rule
+that the assignee may not be the one who signs its own work off. `approve()` walks the
+gate; nothing jumps it.
 
 ## n8n / workflows / dify → workflow definitions
 

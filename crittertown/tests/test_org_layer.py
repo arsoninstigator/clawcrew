@@ -85,7 +85,7 @@ class ChannelTests(AppCase):
         self.channel("support")
         self.app.channels.create_task(growth["id"], "one")
         finished = self.app.channels.create_task(growth["id"], "two", column="in_progress")
-        self.kanban.move(finished["id"], "done", actor="wren")
+        self.kanban.approve(finished["id"], "owner")
         self.app.channels.post(growth["id"], "hello")
         overview = self.app.channels.overview(self.team["id"])
         rows = {row["slug"]: row for row in overview["channels"]}

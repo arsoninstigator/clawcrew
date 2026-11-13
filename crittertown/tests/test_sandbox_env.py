@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -56,10 +57,21 @@ class LocalProviderEnvTests(unittest.TestCase):
     """the dev provider runs real subprocesses, so it can prove the env actually lands."""
 
     def test_a_command_sees_the_env_it_was_handed(self):
+        """checked at the boundary, because the local provider no longer runs
+        interpreters: a test that needed `python3 -c` to read an env var was asking the
+        guard to be loose enough to be a hole."""
         provider = LocalProvider(tempfile.mkdtemp(prefix="envtest-"))
         handle = provider.ensure("envtest", {}, {"SANDBOX_TOKEN": SECRET})
-        result = provider.exec(handle, 'python3 -c "import os;print(os.environ.get(\'SANDBOX_TOKEN\',\'\'))"')
-        self.assertEqual(result.stdout.strip(), SECRET)
+        seen: dict = {}
+        real = subprocess.run
+
+        def capture(*args, **kwargs):
+            seen.update(kwargs.get("env") or {})
+            return real(*args, **kwargs)
+
+        with mock.patch.object(subprocess, "run", capture):
+            provider.exec(handle, "pwd")
+        self.assertEqual(seen.get("SANDBOX_TOKEN"), SECRET)
 
     def test_a_second_handle_does_not_leak_the_first_env(self):
         provider = LocalProvider(tempfile.mkdtemp(prefix="envtest-"))
@@ -133,7 +145,7 @@ class CrewHandsEnvTests(AppCase):
             vault_base_url="http://agent-vault:14321",
         )
         self.app.vault.env = {"WREN_VAULT_TOKEN": SECRET}
-        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
 
     def test_a_provider_that_takes_env_is_handed_it(self):
         seen = {}
@@ -218,7 +230,7 @@ class SandboxEnvRouteTests(AppCase):
             vault_base_url="http://agent-vault:14321",
         )
         self.app.vault.env = {"WREN_VAULT_TOKEN": SECRET}
-        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN")
+        self.app.vault.grant(self.wren["id"], label="github", token_env="WREN_VAULT_TOKEN", scopes=["github.com"])
         from fastapi.testclient import TestClient
 
         from api.routes import create_api

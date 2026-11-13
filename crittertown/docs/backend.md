@@ -109,9 +109,13 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 
 - `token_env` is the **name** of the variable the brokered token arrives in. crittertown reads
   it from its own environment at spawn time and never stores it, logs it or returns it
-- `scopes` are host suffixes. an unscoped grant defers to the proxy's own service rules; a
-  scoped grant is also enforced by crittertown (`POST /vault/egress`), so widening the proxy
-  cannot silently widen an agent
+- `scopes` are host suffixes and they are required. a grant with no scopes used to defer
+  to the proxy's own service rules, which meant "any host", so it is refused at write time
+  now and a legacy unscoped row denies instead of deferring. the grant is enforced by
+  crittertown at `POST /vault/egress`, which the proxy asks before it dials, and the
+  sandbox gets the proxy as `HTTP(S)_PROXY` so the ask is on the path rather than
+  optional. the honest caveat: this is a real check only for traffic that goes through
+  the proxy, and a provider that lets a sandbox out directly is outside it
 - `GET /agents/{id}/vault` shows the shape of what a sandbox would receive, with every
   value masked (`<set>` or `<missing>`), and `sandbox_env()` refuses to spawn an agent whose
   token is missing rather than starting it crippled
