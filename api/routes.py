@@ -18,7 +18,8 @@ groups:
   /triggers     event -> queued action rules
   /shift-plans  coverage rotations, and the handoffs between them
   /audit        the per-agent hash-chained provenance trail
-  /ui/pov       the served point-of-view switcher
+  /ui/pov       the served point-of-view switcher and profile editor
+  /ui/isolation the page about two agents drifting into one profile
   /profile      per-agent skills, scope, memory, perms, tools, vertical, spawn policy
   /ops          health, providers, queue tick, worker drain, counts
   /imports      read an agent from another tool's format, and export one back
@@ -39,7 +40,7 @@ from comms.events import Event
 from core.errors import CritterTownError, NotFound, ValidationError
 from agents.importers import SOURCES, import_workflow
 from manage.knowledge.service import ADAPTERS
-from api.pages import POV_PAGE, gate_page
+from api.pages import ISOLATION_PAGE, POV_PAGE, gate_page
 
 
 def create_api(app: App | None = None) -> FastAPI:
@@ -691,6 +692,12 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/ui/pov", response_class=HTMLResponse)
     def pov_page() -> str:
         return POV_PAGE
+
+    @api.get("/ui/isolation", response_class=HTMLResponse)
+    def isolation_page() -> str:
+        """the one canvas page about a failure rather than a view: two agents that
+        drifted into the same profile, shown as a page and not a line in a report."""
+        return ISOLATION_PAGE
 
     # ---- per-agent profile: nine namespaces, no shared bucket ----------
     @api.get("/agents/{agent_id}")

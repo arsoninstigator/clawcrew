@@ -113,7 +113,7 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (649 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (660 tests, no network, no sleeps), and it is honest about what is
 not done: the npm and mcp entry points in `get/`, and the adapter that mints a code from
 proton pass or bitwarden when a gate is approved. see `crittertown/docs/remaining.md`.
 

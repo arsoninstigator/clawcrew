@@ -195,7 +195,7 @@ brief of zeros rather than an error.
 
 ---
 
-## 3. canvas, part a: pov shell and the profile editor
+## 3. canvas, part a: pov shell and the profile editor (built)
 
 **purpose.** `/ui/pov` is a served switcher: one page, no build step, honest proof
 that pov is a projection. the product version needs three things it does not have:
@@ -236,6 +236,24 @@ cannot tell.
 
 **non-goals.** a generic chat-side editor for these nine, and any bulk edit across
 agents (that is how agents become mush).
+
+what is now built, and what was kept out of it:
+
+- `/ui/pov` is the shell: rail of crews and their channels, a "viewing as" selector
+  with the permanent `agent_key` beside the name, and seven views (board, calendar,
+  inbox, runs, profile, computer, access) all fed by routes that already existed.
+  `api/pages.py` holds one route table (`var R`) and the suite checks every entry
+  against the openapi document, so the page cannot call a path that is not there.
+- the profile editor is the nine namespaces as columns. a save is
+  `PUT /agents/{id}/profile/{namespace}/{key}`, shows the value it stores (never a
+  merge), then reads `consistency` and updates the fingerprint. `perms` is not in it:
+  grants are a card on the access view with their own revoke.
+- `/ui/isolation` exists because the spec asked for a page, not a line in a report:
+  identical and shared profiles per crew, with each agent's `agent_key`.
+- deliberately not built here: server-side rendering, a build step, or a session. the
+  page is a projection over the same rows, and the only writes it may make are a card
+  move, a calendar block, a profile value and a grant revoke, each through the same
+  endpoints and audit as any other write.
 
 ---
 
