@@ -200,9 +200,17 @@ def build_model(settings: Settings, override: dict | None = None) -> AgentModel:
     return DeterministicModel()
 
 
-def render_prompt(task: dict, agent: dict, crew: dict, context: dict, inbox: list[dict]) -> str:
+def render_prompt(task: dict, agent: dict, crew: dict, context: dict, inbox: list[dict],
+                  intent: str = "") -> str:
+    """the prompt a run starts from. `intent` goes above the task on purpose: an agent
+    that reads the task first optimises the task, and the point of the intent column is
+    that the crew's direction is louder than the card."""
     lines = [
         f"crew: {crew['name']} ({crew['mission'] or 'no mission set'})",
+    ]
+    if intent:
+        lines.append(intent)
+    lines += [
         f"you are: {agent['name']} ({agent['role'] or 'generalist'})",
         f"task: {task['title']}",
         f"task id: {task['id']}",

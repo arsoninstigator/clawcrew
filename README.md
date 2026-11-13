@@ -41,6 +41,8 @@ crew
  ├── rooms ── conversation + their own board
  ├── org chart ── coordinators, escalation, routing
  ├── shifts ── rotation, on duty, handoffs
+ ├── intent ── direction, constraints, definition of done (read into every run)
+ ├── routines ── recurring work with a receipt per day
  ├── workflows ── dag, agent authored, human approved
  └── schedules ── durable queue, overnight brief
 ```
@@ -113,9 +115,12 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (660 tests, no network, no sleeps), and it is honest about what is
-not done: the npm and mcp entry points in `get/`, and the adapter that mints a code from
-proton pass or bitwarden when a gate is approved. see `crittertown/docs/remaining.md`.
+it runs, it is tested (684 tests, no network, no sleeps), and it is honest about what is
+not done: guardrails (the standing limits that hold when nobody is awake to answer a
+gate), self improvement (an approved lesson written back into a profile), the npm and mcp
+entry points in `get/`, and the adapter that mints a code from proton pass or bitwarden
+when a gate is approved. `crittertown/docs/directive.md` is the contract for the first two, and
+`crittertown/docs/remaining.md` for the rest.
 
 ## licence
 

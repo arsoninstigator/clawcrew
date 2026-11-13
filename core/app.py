@@ -30,6 +30,7 @@ from comms.service import CommsService
 from core.config import Settings
 from agents.crews import CrewService
 from org.departments import DepartmentService
+from org.intent import IntentService
 from core.db import Store, open_store
 from core.errors import CritterTownError
 from ingredients.projectmanagement.kanban.board import KanbanService
@@ -42,6 +43,7 @@ from work.scheduler import Scheduler, Worker, make_broker
 from core.services import ServiceRegistry
 from work.shifts import ShiftService
 from work.triggers import TriggerService
+from work.routines import RoutineService
 from work.workflows import WorkflowService
 
 
@@ -58,6 +60,10 @@ class App:
     workflows: WorkflowService
     channels: ChannelService
     departments: DepartmentService
+    # what the crew is for, read into every run, and the recurring work that
+    # leaves a receipt whether it happened or not
+    intent: IntentService
+    routines: RoutineService
     triggers: TriggerService
     pov: PovService
     audit: AuditService
@@ -166,9 +172,11 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     crews = CrewService(store, registry, keys=signers)
     kanban = KanbanService(store)
     a2a = A2AService(store)
-    runner = CrewRunner(store, registry, settings, model=model)
+    intent = IntentService(store, crews=crews)
+    runner = CrewRunner(store, registry, settings, model=model, intent=intent)
     services = ServiceRegistry(settings)
     workflows = WorkflowService(store, runner, services=services)
+    routines = RoutineService(store, kanban, crews=crews)
     broker = make_broker(store, settings)
     scheduler = Scheduler(store, broker)
     worker = Worker(store, runner, workflows, broker=broker, scheduler=scheduler)
@@ -179,7 +187,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     channels = ChannelService(store, kanban)
     departments = DepartmentService(store, kanban, a2a)
     pov = PovService(store, kanban, crews, channels=channels, departments=departments,
-                     scheduler=scheduler)
+                     scheduler=scheduler, intent=intent, routines=routines)
     audit = AuditService(store, keys=signers)
     shifts = ShiftService(store, crews, kanban, channels=channels, a2a=a2a, audit=audit)
     profile = ProfileService(store, crews=crews, audit=audit)
@@ -263,6 +271,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         channels=channels,
         departments=departments,
         triggers=triggers,
+        intent=intent,
+        routines=routines,
         pov=pov,
         audit=audit,
         shifts=shifts,

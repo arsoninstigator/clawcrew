@@ -39,11 +39,14 @@ class CrewRunner:
         registry: ProviderRegistry,
         settings: Settings,
         model: AgentModel | None = None,
+        intent=None,
     ):
         self.store = store
         self.registry = registry
         self.settings = settings
         self.model = model or build_model(settings)
+        # set by the composition root: the crew's intent is read into every prompt
+        self.intent = intent
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -128,7 +131,8 @@ class CrewRunner:
             self._insert_run(run_id, task, agent, provider.name, handle.ref)
             inbox = self.a2a.inbox(agent["id"], limit=10)
             context = self.crews.context(task["team_id"])["values"]
-            prompt = render_prompt(task, agent, team, context, inbox)
+            intent = self.intent.prompt(team["id"], agent["id"]) if self.intent else ""
+            prompt = render_prompt(task, agent, team, context, inbox, intent=intent)
             system_prompt = agent["system_prompt"] or (
                 f"you are {agent['name']}, {agent['role'] or 'a member'} of the {team['name']} crew."
             )

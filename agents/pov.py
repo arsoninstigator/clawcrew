@@ -50,7 +50,7 @@ def to_timestamp(value: Any) -> float | None:
 
 class PovService:
     def __init__(self, store: Store, kanban, crews, channels=None, departments=None,
-                 scheduler=None, profile=None):
+                 scheduler=None, profile=None, intent=None, routines=None):
         self.store = store
         self.kanban = kanban
         self.crews = crews
@@ -58,6 +58,8 @@ class PovService:
         self.departments = departments
         self.scheduler = scheduler
         self.profile = profile
+        self.intent = intent
+        self.routines = routines
 
     # ---- the projection ------------------------------------------------
     def view(self, agent_id: str, days: int = 14) -> dict:
@@ -90,6 +92,15 @@ class PovService:
             "calendar": calendar,
             "inbox": inbox,
             "computer": self.crews.get_computer(agent_id),
+            "intent": self.intent.summary(agent["team_id"], agent_id) if self.intent else None,
+            "routines": (
+                [
+                    {k: r[k] for k in ("id", "name", "cadence", "due_today", "run", "hour")}
+                    for r in self.routines.list(agent["team_id"])
+                ]
+                if self.routines
+                else []
+            ),
             "context": self.crews.context(agent["team_id"]),
             "runs": self.recent_runs(agent_id),
             "profile": self._profile_bits(agent_id),

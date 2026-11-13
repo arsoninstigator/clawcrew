@@ -59,8 +59,16 @@ def tick() -> dict:
 
 def nightly() -> dict:
     """schedule beat, once a night: fire the `schedule.nightly` event, so overnight
-    work is a rule an operator can edit instead of a hardcoded cron in a container."""
-    return {"fired": app.triggers.fire("schedule.nightly", {"team_id": "", "at": now()})}
+    work is a rule an operator can edit instead of a hardcoded cron in a container.
+
+    the one thing here that is deliberately not a rule: routines. a routine's value is
+    the receipt, and the receipt for a day that never happened is the report. that is
+    too load bearing to depend on a row an operator can delete by accident, so the beat
+    materialises them itself.
+    """
+    fired = app.triggers.fire("schedule.nightly", {"team_id": "", "at": now()})
+    routines = app.routines.materialise_all() if getattr(app, "routines", None) else {}
+    return {"fired": fired, "routines": routines}
 
 
 def fire_event(event: str, context: dict | None = None) -> dict:

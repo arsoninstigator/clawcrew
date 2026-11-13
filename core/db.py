@@ -623,6 +623,57 @@ create table if not exists poll_attempts (
     created_date real not null,
     unique (poll_id, attempt)
 );
+
+-- intent: what a crew is for, written down, versioned, and read back into every run.
+-- a task is what to do; an intent is why, and what would make the doing wrong.
+create table if not exists intents (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null default '',
+    kind text not null default 'direction',
+    statement text not null,
+    rationale text not null default '',
+    status text not null default 'active',
+    version integer not null default 1,
+    supersedes text not null default '',
+    actor text not null default 'human',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists intents_team on intents (team_id, status);
+
+-- routines: the recurring work a crew does on a cadence, with a row per day it was
+-- due. schedules enqueue a job; a routine is a promise that leaves a trace when kept
+-- and a miss when not, which is the difference between recurring and repeated.
+create table if not exists routines (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null default '',
+    name text not null,
+    description text not null default '',
+    cadence text not null default 'daily',
+    weekday integer not null default 0,
+    hour integer not null default 8,
+    steps text not null default '[]',
+    required_skills text not null default '[]',
+    status text not null default 'active',
+    created_date real not null,
+    updated_date real not null
+);
+create unique index if not exists routines_name on routines (team_id, name);
+
+create table if not exists routine_runs (
+    id text primary key,
+    routine_id text not null references routines(id) on delete cascade,
+    team_id text not null,
+    on_date text not null,
+    status text not null default 'open',
+    task_id text not null default '',
+    notes text not null default '',
+    created_date real not null,
+    updated_date real not null
+);
+create unique index if not exists routine_runs_day on routine_runs (routine_id, on_date);
 """
 
 

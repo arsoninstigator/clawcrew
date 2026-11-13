@@ -10,8 +10,9 @@ place they talk is `basecamp` (see `crittertown/glossary.md`).
 ```
 agents/        crews, agents, roles, skills, orchestration, importers, adapter registry
 comms/         rooms and the signed event log, channels, a2a, protocol, transports, gateway
-work/          cards, shifts, triggers, jobs, workflows, ops, saga, poll, overnight
-org/           org chart, routing, escalation, verticals
+work/          cards, shifts, triggers, jobs, workflows, ops, saga, poll, overnight,
+               routines (recurring work with a receipt)
+org/           org chart, routing, escalation, verticals, intent (what a crew is for)
 manage/        approvals (gates), knowledge (connectors), audit, attest, approvals ui
 create/        intake and coordination: the front door that turns an ask into a crew
 sandbox/       the machine abstraction the platform uses: base, transport, http, local,

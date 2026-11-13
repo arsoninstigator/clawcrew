@@ -1346,6 +1346,78 @@ def create_api(app: App | None = None) -> FastAPI:
                                      connector_id=connector_id or None)
 
     # ---- packs: reviewed rules a crew can adopt in one call -----------
+    # ---- intent: what the crew is for, above the cards -----------------
+    @api.get("/crews/{team_id}/intent")
+    def crew_intent(team_id: str, agent_id: str = Query(default="")) -> dict:
+        """the live intent, plus any proposal waiting on a person. a proposal steers
+        nothing until it is approved, which is the whole point of the two states."""
+        summary = app.intent.summary(team_id, agent_id)
+        summary["history"] = app.intent.history(team_id, agent_id or None)[:20]
+        return summary
+
+    @api.post("/crews/{team_id}/intent")
+    def record_intent(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.intent.record(
+            team_id,
+            data.get("statement", ""),
+            kind=data.get("kind", "direction"),
+            agent_id=data.get("agent_id", ""),
+            rationale=data.get("rationale", ""),
+            status=data.get("status", "active"),
+            actor=data.get("actor", "human"),
+        )
+
+    @api.post("/intent/{intent_id}/approve")
+    def approve_intent(intent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.intent.approve(intent_id, actor=data.get("actor", "human"),
+                                  edited=data.get("statement", ""))
+
+    @api.post("/intent/{intent_id}/reject")
+    def reject_intent(intent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.intent.reject(intent_id, reason=data.get("reason", ""),
+                                 actor=data.get("actor", "human"))
+
+    # ---- routines: recurring work with a receipt -----------------------
+    @api.get("/crews/{team_id}/routines")
+    def list_routines(team_id: str, on: str = Query(default="")) -> dict:
+        return {"team_id": team_id, "routines": app.routines.list(team_id, on=on or None),
+                "summary": app.routines.summary(team_id)}
+
+    @api.post("/crews/{team_id}/routines")
+    def create_routine(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.routines.create(
+            team_id,
+            data.get("name", ""),
+            description=data.get("description", ""),
+            cadence=data.get("cadence", "daily"),
+            agent_id=data.get("agent_id", ""),
+            weekday=data.get("weekday", 0),
+            hour=int(data.get("hour", 8)),
+            steps=list(data.get("steps") or []),
+            required_skills=list(data.get("required_skills") or []),
+        )
+
+    @api.post("/crews/{team_id}/routines/materialise")
+    def materialise_routines(team_id: str, on: str = Query(default="")) -> dict:
+        """idempotent per (routine, date): calling it twice is how an operator checks
+        without being afraid of the button."""
+        return app.routines.materialise(team_id, on=on or None)
+
+    @api.post("/routines/{routine_id}/done")
+    def complete_routine(routine_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.routines.complete(routine_id, on=data.get("on") or None,
+                                     notes=data.get("notes", ""))
+
+    @api.post("/routines/{routine_id}/pause")
+    def pause_routine(routine_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.routines.pause(routine_id, status=data.get("status", "paused"))
+
     @api.post("/crews/{team_id}/triggers/pack")
     def install_pack(team_id: str, payload: dict = Body(default={})) -> dict:
         data = body(payload) if payload else {}
