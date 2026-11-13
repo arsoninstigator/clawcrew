@@ -43,6 +43,9 @@ crew
  ├── shifts ── rotation, on duty, handoffs
  ├── intent ── direction, constraints, definition of done (read into every run)
  ├── routines ── recurring work with a receipt per day
+ ├── guardrails ── the limits that answer without a person
+ ├── lessons ── what a run taught, proposed and promoted by a person
+ ├── knowledge ── preferences, facts, decisions, processes, patterns, failure modes
  ├── workflows ── dag, agent authored, human approved
  └── schedules ── durable queue, overnight brief
 ```
@@ -115,12 +118,11 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (684 tests, no network, no sleeps), and it is honest about what is
-not done: guardrails (the standing limits that hold when nobody is awake to answer a
-gate), self improvement (an approved lesson written back into a profile), the npm and mcp
-entry points in `get/`, and the adapter that mints a code from proton pass or bitwarden
-when a gate is approved. `crittertown/docs/directive.md` is the contract for the first two, and
-`crittertown/docs/remaining.md` for the rest.
+it runs, it is tested (717 tests, no network, no sleeps), and it is honest about what is
+not done: the npm and mcp entry points in `get/`, the adapter that mints a code from
+proton pass or bitwarden when a gate is approved, and the second half of the canvas (the
+workflow editor). `crittertown/docs/directive.md` covers what autonomy rests on: intent,
+routines, gates, guardrails, lessons and the knowledge base.
 
 ## licence
 

@@ -29,6 +29,9 @@ from comms.gateway import CommsGateway
 from comms.service import CommsService
 from core.config import Settings
 from agents.crews import CrewService
+from manage.guardrails import GuardrailService
+from manage.knowledge.base import KnowledgeBase
+from manage.lessons import LessonService
 from org.departments import DepartmentService
 from org.intent import IntentService
 from core.db import Store, open_store
@@ -64,6 +67,11 @@ class App:
     # leaves a receipt whether it happened or not
     intent: IntentService
     routines: RoutineService
+    # the standing limits, the lessons an agent proposed, and what the crew
+    # already knows
+    guardrails: GuardrailService
+    lessons: LessonService
+    knowledge: KnowledgeBase
     triggers: TriggerService
     pov: PovService
     audit: AuditService
@@ -173,7 +181,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     kanban = KanbanService(store)
     a2a = A2AService(store)
     intent = IntentService(store, crews=crews)
-    runner = CrewRunner(store, registry, settings, model=model, intent=intent)
+    guardrails = GuardrailService(store, kanban=kanban, crews=crews)
+    runner = CrewRunner(store, registry, settings, model=model, intent=intent,
+                        guardrails=guardrails)
     services = ServiceRegistry(settings)
     workflows = WorkflowService(store, runner, services=services)
     routines = RoutineService(store, kanban, crews=crews)
@@ -192,6 +202,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     shifts = ShiftService(store, crews, kanban, channels=channels, a2a=a2a, audit=audit)
     profile = ProfileService(store, crews=crews, audit=audit)
     crews.profile = profile
+    lessons = LessonService(store, profile=profile, crews=crews, audit=audit)
+    knowledge = KnowledgeBase(store, crews=crews, audit=audit)
+    runner.knowledge = knowledge
     pov.profile = profile
     profile.migrate()
     workflows.scheduler = scheduler
@@ -273,6 +286,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         triggers=triggers,
         intent=intent,
         routines=routines,
+        guardrails=guardrails,
+        lessons=lessons,
+        knowledge=knowledge,
         pov=pov,
         audit=audit,
         shifts=shifts,

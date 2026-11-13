@@ -604,6 +604,58 @@ create table if not exists poll_attempts (
     unique (poll_id, attempt)
 );
 
+-- a guardrail answers without a person. a gate asks a human; a guardrail is the
+-- standing limit that still holds at 3am when nobody will answer. `value` is json so
+-- a list kind and a number kind are the same column.
+create table if not exists guardrails (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null default '',
+    kind text not null,
+    value text not null default 'null',
+    status text not null default 'active',
+    actor text not null default 'human',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists guardrails_scope on guardrails (team_id, agent_id, status);
+
+-- self improvement: an agent proposes, a person disposes, and the proposal is a row
+-- so the profile can say where an instruction came from.
+create table if not exists lessons (
+    id text primary key,
+    team_id text not null,
+    agent_id text not null references agents(id) on delete cascade,
+    run_id text not null default '',
+    task_id text not null default '',
+    statement text not null,
+    status text not null default 'proposed',
+    write_as text not null default '',
+    actor text not null default 'agent',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists lessons_agent on lessons (agent_id, status);
+
+-- the curated knowledge base: what would take time to explain again, and what a
+-- capable agent would not already know from context.
+create table if not exists knowledge_entries (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null default '',
+    kind text not null,
+    title text not null,
+    body text not null,
+    symptom text not null default '',
+    workaround text not null default '',
+    tags text not null default '[]',
+    source text not null default '',
+    status text not null default 'active',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create unique index if not exists knowledge_title on knowledge_entries (team_id, kind, title);
+
 -- intent: what a crew is for, written down, versioned, and read back into every run.
 -- a task is what to do; an intent is why, and what would make the doing wrong.
 create table if not exists intents (

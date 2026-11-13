@@ -39,6 +39,7 @@ from core.app import App, build_app
 from comms.events import Event
 from core.errors import CritterTownError, NotFound, ValidationError
 from agents.importers import SOURCES, import_workflow
+from manage.knowledge.base import KINDS as KNOWLEDGE_KINDS
 from manage.knowledge.service import ADAPTERS
 from api.pages import ISOLATION_PAGE, POV_PAGE, gate_page
 
@@ -1417,6 +1418,113 @@ def create_api(app: App | None = None) -> FastAPI:
     def pause_routine(routine_id: str, payload: dict = Body(default={})) -> dict:
         data = body(payload)
         return app.routines.pause(routine_id, status=data.get("status", "paused"))
+
+    # ---- guardrails: the limits that answer without a person ------------
+    @api.get("/crews/{team_id}/guardrails")
+    def list_guardrails(team_id: str, agent_id: str | None = Query(default=None)) -> dict:
+        return {"guardrails": app.guardrails.list(team_id, agent_id=agent_id),
+                "refused_today": app.guardrails.summary(team_id)}
+
+    @api.post("/crews/{team_id}/guardrails")
+    def set_guardrail(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.guardrails.set(
+            team_id,
+            str(data.get("kind") or ""),
+            data.get("value"),
+            agent_id=str(data.get("agent_id") or ""),
+            actor=str(data.get("actor") or "human"),
+        )
+
+    @api.delete("/guardrails/{rail_id}")
+    def retire_guardrail(rail_id: str, actor: str = Query(default="human")) -> dict:
+        return app.guardrails.retire(rail_id, actor=actor)
+
+    @api.post("/crews/{team_id}/guardrails/check")
+    def check_guardrails(team_id: str, payload: dict = Body(default_factory=dict)) -> dict:
+        data = body(payload)
+        return app.guardrails.check(
+            team_id, str(data.get("action") or "dispatch"), data.get("context") or {})
+
+    # ---- self improvement: propose, dispose, promote -------------------
+    @api.get("/agents/{agent_id}/lessons")
+    def list_lessons(agent_id: str, status: str = Query(default="")) -> dict:
+        return {"lessons": app.lessons.list(agent_id, status=status or None)}
+
+    @api.post("/agents/{agent_id}/lessons")
+    def propose_lesson(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.lessons.propose(
+            agent_id,
+            str(data.get("statement") or ""),
+            run_id=str(data.get("run_id") or ""),
+            actor=str(data.get("actor") or "agent"),
+        )
+
+    @api.get("/crews/{team_id}/lessons/candidates")
+    def lesson_candidates(team_id: str, limit: int = Query(default=10)) -> dict:
+        return {"runs": app.lessons.candidates(team_id, limit=limit)}
+
+    @api.post("/lessons/{lesson_id}/approve")
+    def approve_lesson(lesson_id: str, payload: dict = Body(default_factory=dict)) -> dict:
+        data = body(payload)
+        return app.lessons.approve(lesson_id, statement=data.get("statement"),
+                                   actor=str(data.get("actor") or "human"))
+
+    @api.post("/lessons/{lesson_id}/reject")
+    def reject_lesson(lesson_id: str, payload: dict = Body(default_factory=dict)) -> dict:
+        data = body(payload)
+        return app.lessons.reject(lesson_id, reason=str(data.get("reason") or ""),
+                                  actor=str(data.get("actor") or "human"))
+
+    @api.post("/lessons/{lesson_id}/promote")
+    def promote_lesson(lesson_id: str, payload: dict = Body(default_factory=dict)) -> dict:
+        data = body(payload)
+        return app.lessons.promote(lesson_id, key=str(data.get("key") or ""),
+                                   actor=str(data.get("actor") or "human"))
+
+    # ---- the curated knowledge base ------------------------------------
+    @api.get("/crews/{team_id}/knowledge")
+    def search_knowledge(team_id: str, q: str = Query(default=""),
+                         kind: str = Query(default=""), agent_id: str = Query(default=""),
+                         limit: int = Query(default=20)) -> dict:
+        return {
+            "entries": app.knowledge.search(team_id, q, kind=kind, agent_id=agent_id,
+                                            limit=limit),
+            "stats": app.knowledge.stats(team_id),
+            "kinds": list(KNOWLEDGE_KINDS),
+        }
+
+    @api.post("/crews/{team_id}/knowledge")
+    def record_knowledge(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.knowledge.record(
+            team_id,
+            kind=str(data.get("kind") or ""),
+            title=str(data.get("title") or ""),
+            body=str(data.get("body") or ""),
+            agent_id=str(data.get("agent_id") or ""),
+            symptom=str(data.get("symptom") or ""),
+            workaround=str(data.get("workaround") or ""),
+            tags=list(data.get("tags") or []),
+            source=str(data.get("source") or ""),
+            actor=str(data.get("actor") or "human"),
+        )
+
+    @api.post("/knowledge/{entry_id}")
+    def update_knowledge(entry_id: str, payload: dict = Body(default_factory=dict)) -> dict:
+        data = body(payload)
+        return app.knowledge.update(
+            entry_id,
+            body=data.get("body"),
+            tags=data.get("tags"),
+            status=data.get("status"),
+            actor=str(data.get("actor") or "human"),
+        )
+
+    @api.delete("/knowledge/{entry_id}")
+    def retire_knowledge(entry_id: str, actor: str = Query(default="human")) -> dict:
+        return app.knowledge.retire(entry_id, actor=actor)
 
     @api.post("/crews/{team_id}/triggers/pack")
     def install_pack(team_id: str, payload: dict = Body(default={})) -> dict:

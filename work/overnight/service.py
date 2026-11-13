@@ -101,6 +101,9 @@ class BriefService:
                where t.team_id = ? and e.created_date >= ? and e.created_date <= ?
                group by e.kind, dest""",
             (team_id, start, end))
+        # a refusal never becomes a run, so it can only be counted from the board's own
+        # event log. that is also why it cannot be mistaken for a failure later.
+        refused = sum(int(r["n"]) for r in events if r["kind"] == "guardrail_refused")
         moved = sum(int(r["n"]) for r in events if r["kind"] == "moved")
         completed = sum(int(r["n"]) for r in events
                         if r["kind"] == "moved" and (r["dest"] or "") == "done")
@@ -126,6 +129,9 @@ class BriefService:
                 "cards_completed": completed,
                 "cards_moved": moved,
                 "triggers_fired": fired,
+                # refused is not failed. a limit that stopped work is a different
+                # problem from work that broke, and this is where it is read apart.
+                "refused": refused,
             },
             "waiting": waiting,
             "today": {
@@ -152,6 +158,9 @@ class BriefService:
             risks.append(f"{waiting['gates']} approval link(s) are unanswered")
         if waiting["handoffs"]:
             risks.append(f"{waiting['handoffs']} handoff(s) not accepted")
+        if numbers["overnight"]["refused"]:
+            risks.append(
+                f"{numbers['overnight']['refused']} dispatch(es) refused by a guardrail")
         return numbers
 
     def _waiting(self, team_id: str) -> dict:

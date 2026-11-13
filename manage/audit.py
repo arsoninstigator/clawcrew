@@ -428,6 +428,25 @@ class AuditService:
                 },
             )
 
+        if event in {"guardrail.set", "guardrail.retired", "guardrail.refused",
+                     "lesson.proposed", "lesson.approved", "lesson.rejected",
+                     "lesson.promoted", "knowledge.recorded", "knowledge.updated"}:
+            agent_id = agent_of(context.get("agent_id"))
+            if not agent_id:
+                return None
+            data = context.get("data") or {}
+            return self.record(
+                team_id=team_id,
+                agent_id=agent_id,
+                action=event,
+                actor_kind="human" if actor and not str(actor).startswith("agent_") else "agent",
+                actor_id=actor or agent_id,
+                target_kind=event.split(".")[0],
+                target_id=str(data.get("guardrail_id") or data.get("lesson_id")
+                              or data.get("entry_id") or ""),
+                payload=data,
+            )
+
         if event == "a2a.message":
             message = context.get("message") or {}
             agent_id = agent_of(message.get("from_agent_id"))

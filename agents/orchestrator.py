@@ -40,6 +40,7 @@ class CrewRunner:
         settings: Settings,
         model: AgentModel | None = None,
         intent=None,
+        guardrails=None,
     ):
         self.store = store
         self.registry = registry
@@ -47,6 +48,10 @@ class CrewRunner:
         self.model = model or build_model(settings)
         # set by the composition root: the crew's intent is read into every prompt
         self.intent = intent
+        # set by the composition root: the standing limits, checked before a card
+        # is allowed to become work
+        self.guardrails = guardrails
+        self.knowledge = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -115,7 +120,17 @@ class CrewRunner:
             raise ValidationError(
                 f"task is in '{task['column']}'; move it to 'ready' before dispatching"
             )
+        # the limits answer before a card becomes work. team wide first, so a crew at
+        # its ceiling refuses without even choosing an agent
+        if self.guardrails is not None:
+            self.guardrails.enforce(task["team_id"], "dispatch", {}, task=task)
         agent = self.pick_agent(task["team_id"], task)
+        if self.guardrails is not None:
+            self.guardrails.enforce(
+                task["team_id"], "dispatch",
+                {"agent_id": agent["id"], "tools": agent.get("tools") or []},
+                task=task,
+            )
         if task["column"] == "ready":
             task = self.kanban.move(task_id, "in_progress", actor)
         self.crews.update_agent(agent["id"], status="working")
@@ -131,8 +146,15 @@ class CrewRunner:
             self._insert_run(run_id, task, agent, provider.name, handle.ref)
             inbox = self.a2a.inbox(agent["id"], limit=10)
             context = self.crews.context(task["team_id"])["values"]
-            intent = self.intent.prompt(team["id"], agent["id"]) if self.intent else ""
-            prompt = render_prompt(task, agent, team, context, inbox, intent=intent)
+            intent_block = self.intent.prompt(team["id"], agent["id"]) if self.intent else ""
+            prompt = render_prompt(
+                task, agent, team, context, inbox,
+                intent=intent_block,
+                knowledge=(
+                    self.knowledge.for_prompt(team["id"], agent["id"])
+                    if self.knowledge is not None else ""
+                ),
+            )
             system_prompt = agent["system_prompt"] or (
                 f"you are {agent['name']}, {agent['role'] or 'a member'} of the {team['name']} crew."
             )

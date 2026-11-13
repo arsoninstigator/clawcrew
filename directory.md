@@ -13,7 +13,8 @@ comms/         rooms and the signed event log, channels, a2a, protocol, transpor
 work/          cards, shifts, triggers, jobs, workflows, ops, saga, poll, overnight,
                routines (recurring work with a receipt)
 org/           org chart, routing, escalation, verticals, intent (what a crew is for)
-manage/        approvals (gates), knowledge (connectors), audit, attest, approvals ui
+manage/        approvals (gates), knowledge (connectors + the curated base),
+               guardrails (limits), lessons (self improvement), audit, attest
 create/        intake and coordination: the front door that turns an ask into a crew
 sandbox/       the machine abstraction the platform uses: base, transport, http, local,
                provision (terraform specs), and the provider registry

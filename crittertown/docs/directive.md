@@ -63,11 +63,10 @@ and nothing else may write that word.
 
 ## guardrails
 
-**not built.** this is the next piece, and it is the one missing for real autonomy.
+**built.** `manage/guardrails.py`, table `guardrails`, `crittertown/tests/test_guardrails.py`.
 
 the difference from a gate: a gate asks a person, a guardrail answers without one. it is
-the standing limit that holds at 3am when nobody will answer. proposal, in the shape this
-tree already uses:
+the standing limit that holds at 3am when nobody will answer. what is in:
 
 - table `guardrails`: `team_id`, `agent_id`, `kind`, `value`, `status`, `actor`.
 - kinds: `spend_per_day`, `open_cards`, `parallel_runs`, `egress_hosts`, `forbidden_tools`,
@@ -81,9 +80,9 @@ tree already uses:
 
 ## self improvement
 
-**not built.** and it should not be built before guardrails, because an agent allowed to
-rewrite its own instructions without a standing limit is the thing guardrails exist to
-make safe.
+**built.** `manage/lessons.py`, table `lessons`, `crittertown/tests/test_lessons.py`. it
+came after guardrails, on purpose: an agent allowed to rewrite its own instructions
+without a standing limit is the thing guardrails exist to make safe.
 
 the shape worth arguing about: an agent proposes, a person or a gate disposes, and the
 proposal is a row rather than a silent write. that machinery is already here (`propose`
@@ -94,4 +93,37 @@ path that takes an approved lesson and writes it into `profile.instructions` wit
 which is the difference between an agent that learned and an agent that drifted.
 
 the one rule to keep: a lesson can never edit a `constraint`. constraints are the owner's,
-and an agent that can loosen its own constraint is not improving.
+and an agent that can loosen its own constraint is not improving. the build enforces it
+structurally instead of by reading the sentence: a promotion may only write the
+`instructions` namespace, so `scope`, `perms` and the constraint rows are not reachable
+from the lesson path at all. a rejected lesson keeps its reason, because the rejections
+are the record of what the crew decided not to learn.
+
+## what the crew already knows
+
+**built.** `manage/knowledge/base.py`, table `knowledge_entries`,
+`crittertown/tests/test_knowledge_base.py`. this is separate from the document ingestors
+next door (`manage/knowledge/service.py` pulls notion, drive, a folder or an http
+endpoint). those fetch material; this keeps the few things that are worth re-explaining.
+
+six kinds, and the test is whether re-deriving it would cost someone time:
+
+- `preference`: a rule about how work is done, that a reasonable agent would not guess
+- `fact`: an id, a url, an account, the name of the person who owns a process
+- `decision`: what was chosen, when, and **because** something. a decision without a
+  reason is refused, since the reason is the part that stops the argument reopening
+- `process`: steps that are not obvious, kept in order
+- `pattern`: an approach that applies in more than one place
+- `failure_mode`: something that looks like it should work and does not, with the symptom
+  and the workaround
+
+admission is a gate, not a filter: `worth_keeping()` refuses what is too short to be a
+rule, a question, a decision with no reason, a process with one step and no order, a
+failure with no symptom, and a duplicate title inside the same crew and kind. each
+refusal returns the reason, so the api teaches the rule instead of silently dropping the
+entry. entries are `active` until retired, and firing a lookup for a missing entry
+records a miss rather than writing one.
+
+what stays out: what is obvious from the context already in the prompt, what changes
+every week, and general knowledge. the knowledge block in a prompt is deliberately short
+(five entries) and sits under the intent, because the intent outranks it.
